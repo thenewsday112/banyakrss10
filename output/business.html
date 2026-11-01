@@ -32,6 +32,259 @@ footer{text-align:center;color:#64748b;font-size:14px;padding:30px 0;border-top:
 <header><h1>News Portal Indonesia</h1></header>
 <nav><a href="index.html">🏠 All News</a><a href="technology.html">📰 Technology</a><a href="business.html" class="active">📰 Business</a><a href="sports.html">📰 Sports</a><a href="entertainment.html">📰 Entertainment</a><a href="health.html">📰 Health</a><a href="science.html">📰 Science</a><a href="politics.html">📰 Politics</a><a href="world.html">📰 World</a><a href="finance.html">📰 Finance</a><a href="travel.html">📰 Travel</a><a href="food.html">📰 Food</a><a href="automotive.html">📰 Automotive</a><a href="education.html">📰 Education</a><a href="lifestyle.html">📰 Lifestyle</a><a href="other.html">📰 Other</a></nav>
 <h1 style="color:#1e293b;border-left:5px solid #2563eb;padding-left:15px;margin-bottom:30px;">Business - News Portal Indonesia</h1>
+<article class="article-card" id="artikel-7242">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "This Year Has Fifty Three Weeks and Last Time Our Reports Lost One of Them", "image": [], "datePublished": "2026-11-01T13:09:27+00:00", "dateModified": "2026-11-01T13:09:27+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-7242"}</script>
+    <h2>This Year Has Fifty Three Weeks and Last Time Our Reports Lost One of Them</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Business</strong> &nbsp;|&nbsp;
+        <a href="https://dev.to/serguey_shinder_4ab9b87b1/this-year-has-fifty-three-weeks-and-last-time-our-reports-lost-one-of-them-cko" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><p>Most of our reporting is by week. Depots are measured on weekly sales, buyers forecast in weeks, and the board pack compares each week with the same week last year. Under the standard week numbering that most of our systems use, a year has fifty two weeks, except now and then, when it has fifty three. This year is one of those. Week fifty three of 2026 starts on Monday the twenty eighth of December.</p>
+
+<p>The last such year was 2020, and we found out the hard way. Our sales data warehouse had a table of weeks built in 2015, with fifty two rows for every year, and the overnight load looked up the week for each sale in that table. For the last week of 2020 it found nothing, and it quietly discarded the rows. Five trading days, about nine million pounds of sales, were missing from the warehouse for three weeks.</p>
+
+<p>The board saw December down eleven percent on the year before. Two depots were questioned about a collapse in sales that had not happened. When we found the cause and reloaded the week, the comparisons were still wrong, because the warehouse system and our trading calendar disagreed about which week was the first of 2021, and every year on year figure for January was compared with the wrong week.</p>
+
+<p>None of our systems were faulty in their own terms. Each one had been given a definition of a week by whoever built it and had applied it faithfully. There were simply several definitions.</p>
+
+<p>This summer we listed every system that numbers weeks. There are eleven. Four did not handle a fifty third week, and two use a different rule for where the year starts. Finance, the buyers and IT have now agreed one trading calendar, held in one table and read by all eleven systems instead of their own copies. We loaded a test year with fifty three weeks into each of them in September, and the warehouse load now stops and raises an alert when it meets a date it cannot place, instead of dropping it.</p>
+
+<p>The fault we had in 2020 will come back every five or six years, and the people who remember it will not always be here.</p>
+
+<p>A calendar is reference data like any other, and we had let every system write its own.</p>
+
+<p>– Serguey Shinder</p></div>
+</article>
+<article class="article-card" id="artikel-7243">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "How to build a mortgage calculator in React", "image": [], "datePublished": "2026-11-01T13:09:16+00:00", "dateModified": "2026-11-01T13:09:16+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-7243"}</script>
+    <h2>How to build a mortgage calculator in React</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Business</strong> &nbsp;|&nbsp;
+        <a href="https://dev.to/marcoschulz123/how-to-build-a-mortgage-calculator-in-react-4l0p" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><p>Every real estate site I have built for a client ended up with the same request about two weeks after launch: "Can we show buyers what the monthly payment would be?" The first time, I wrote the calculator from scratch. The second time, I copied it and fixed the bugs I had shipped the first time. By the fourth site I packaged it as the <a href="https://dev.to/components/mortgage-calculator">Mortgage calculator</a> in Facade. This article walks through how it works, so you can build your own or install mine and know what is inside.</p>
+
+<h2>
+  
+  
+  The payment formula, explained once
+</h2>
+
+<p>A fixed rate mortgage payment is one formula. Everything else in the component is presentation.</p>
+
+<p>With a loan amount P, a monthly interest rate r (the annual rate divided by 12 and by 100) and a number of monthly payments n (years times 12), the monthly principal and interest payment is:<br>
+</p>
+
+
+
+
+M = P * r * (1 + r)^n / ((1 + r)^n - 1)
+
+
+
+
+
+
+<p>Two edge cases matter in code. When the rate is zero, the formula divides by zero, so you return P / n instead. When the down payment reaches 100 percent, the loan amount is zero and the payment is zero. Both happen the moment a visitor drags a slider to the end, so handle them before you touch any animation.</p>
+
+<p>In TypeScript:<br>
+</p>
+
+
+
+
+<span>export</span> <span>function</span> <span>monthlyPayment</span><span>(</span><span>loan</span><span>:</span> <span>number</span><span>,</span> <span>annualRate</span><span>:</span> <span>number</span><span>,</span> <span>years</span><span>:</span> <span>number</span><span>)</span> <span>{</span>
+  <span>const</span> <span>n</span> <span>=</span> <span>years</span> <span>*</span> <span>12</span><span>;</span>
+  <span>if </span><span>(</span><span>loan</span> <span>&lt;=</span> <span>0</span><span>)</span> <span>return</span> <span>0</span><span>;</span>
+  <span>if </span><span>(</span><span>annualRate</span> <span>===</span> <span>0</span><span>)</span> <span>return</span> <span>loan</span> <span>/</span> <span>n</span><span>;</span>
+  <span>const</span> <span>r</span> <span>=</span> <span>annualRate</span> <span>/</span> <span>100</span> <span>/</span> <span>12</span><span>;</span>
+  <span>const</span> <span>f</span> <span>=</span> <span>Math</span><span>.</span><span>pow</span><span>(</span><span>1</span> <span>+</span> <span>r</span><span>,</span> <span>n</span><span>);</span>
+  <span>return </span><span>(</span><span>loan</span> <span>*</span> <span>r</span> <span>*</span> <span>f</span><span>)</span> <span>/</span> <span>(</span><span>f</span> <span>-</span> <span>1</span><span>);</span>
+<span>}</span>
+
+
+
+
+
+
+<p>Principal and interest are only part of what a buyer pays each month. US buyers expect property tax, homeowners insurance and, for condos, HOA dues on the same screen. Tax is an annual percentage of the home price divided by 12. Insurance is an annual dollar amount divided by 12. HOA is already monthly. The total is the sum of the four, and that total is the number the visitor remembers.</p>
+
+<h2>
+  
+  
+  Controlled inputs with sliders
+</h2>
+
+<p>The calculator has four inputs: home price, down payment, interest rate and loan term. The first three are range inputs with the formatted value printed next to the label, so a buyer always sees the exact number the slider is on. If you add a text input next to each slider, make both controls write to the same piece of state, which keeps them in sync without effects.</p>
+
+<p>Down payment is the input that trips people up. Buyers think in percent, lenders think in dollars, and the slider has to show both. Store the percent, derive the dollar amount, and clamp the percent between 0 and 50 so the slider stays useful. A 90 percent down payment is technically valid and practically never happens.</p>
+
+<p>A few details that make the inputs feel right:</p>
+
+<ul>
+<li>Format the displayed values with Intl.NumberFormat, not with string concatenation. $1,250,000 reads, $1250000 does not.</li>
+<li>Pick a sensible step for the price slider, a few thousand dollars at least. Pixel precision on a 2 million dollar range is useless.</li>
+<li>Label every range with a visible &lt;label&gt; and an aria-valuetext that reads the formatted value. Screen readers announce "650,000 dollars", not "650000".</li>
+</ul>
+
+<h2>
+  
+  
+  The 15 or 30 year term toggle
+</h2>
+
+<p>Most calculators put the term in a select. A segmented toggle with two options is faster and shows both choices at once. In Facade it is a small two button group that moves a sliding pill behind the active option, and the payment re-renders the moment it changes. Buyers click it back and forth to feel the difference, which is exactly what you want them doing on a listing page.</p>
+
+<p>Under the hood it is a role="radiogroup" with two role="radio" buttons, arrow keys to switch, and the defaultTerm prop set to 15 or 30. Nothing fancy, but the arrow keys matter: a toggle that only works with a mouse is a bug.</p>
+
+<h2>
+  
+  
+  A donut breakdown with motion
+</h2>
+
+<p>A single total hides where the money goes. The donut shows four segments: principal and interest, tax, insurance and HOA. Each segment is an SVG circle with a strokeDasharray for its share and a strokeDashoffset to position it after the previous segment.</p>
+
+<p>Animating the segments is where motion/react earns its place. Each circle's strokeDasharray and strokeDashoffset are animated when the values change, so dragging the price slider makes the segments breathe instead of jumping. The total in the middle of the donut uses the same count-up logic as the free <a href="https://dev.to/components/animated-counter">Animated counter</a>: it tweens from the previous value to the new one over a few hundred milliseconds, formatted as currency on every frame.</p>
+
+<p>Two rules I follow for this kind of animation:</p>
+
+<ul>
+<li>Animate on change, not on mount only. The first render can animate in, but the interesting moment is the slider drag.</li>
+<li>Respect prefers-reduced-motion. useReducedMotion() from motion returns true for those visitors, and the component then sets values directly instead of springing to them.</li>
+</ul>
+
+<h2>
+  
+  
+  Install it with the shadcn CLI
+</h2>
+
+<p>The Mortgage calculator is a Pro item, so it installs from the private registry once your license key is in components.json (the <a href="https://dev.to/docs/installation#pro">installation docs</a> show the one time setup).<br>
+</p>
+
+
+
+
+npx shadcn@latest add @facade/mortgage-calculator
+
+
+
+
+
+
+<p>Then drop it on a listing page with the listing's price as the default and your market's tax rate:<br>
+</p>
+
+
+
+
+<span>import</span> <span>{</span> <span>MortgageCalculator</span><span>,</span> <span>type</span> <span>MortgageBreakdown</span> <span>}</span> <span>from</span> <span>"</span><span>@/components/facade/mortgage-calculator</span><span>"</span><span>;</span>
+
+<span>export</span> <span>function</span> <span>ListingPayment</span><span>({</span> <span>price</span> <span>}:</span> <span>{</span> <span>price</span><span>:</span> <span>number</span> <span>})</span> <span>{</span>
+  <span>return </span><span>(</span>
+    <span>&lt;</span><span>MortgageCalculator</span>
+      <span>defaultPrice</span><span>=</span><span>{</span><span>price</span><span>}</span>
+      <span>defaultDownPercent</span><span>=</span><span>{</span><span>20</span><span>}</span>
+      <span>defaultRate</span><span>=</span><span>{</span><span>6.5</span><span>}</span>
+      <span>defaultTerm</span><span>=</span><span>{</span><span>30</span><span>}</span>
+      <span>propertyTaxRate</span><span>=</span><span>{</span><span>1.1</span><span>}</span>
+      <span>annualInsurance</span><span>=</span><span>{</span><span>1800</span><span>}</span>
+      <span>monthlyHoa</span><span>=</span><span>{</span><span>0</span><span>}</span>
+      <span>title</span><span>=</span><span>"Estimate your monthly payment"</span>
+      <span>onChange</span><span>=</span><span>{</span><span>(</span><span>result</span><span>:</span> <span>MortgageBreakdown</span><span>)</span> <span>=&gt;</span> <span>{</span>
+        <span>// result.total, result.principalAndInterest, result.propertyTax, result.insurance, result.hoa, result.loanAmount</span>
+      <span>}</span><span>}</span>
+    <span>/&gt;</span>
+  <span>);</span>
+<span>}</span>
+
+
+
+
+
+
+<p>The onChange callback hands you the full breakdown on every change. I use it to update a "Payment from $X per month" line in the sticky header of the listing page, and some agents use it to prefill a pre-approval request.</p>
+
+<p>If you only need the count-up number without the calculator, the Animated counter is free and MIT licensed:<br>
+</p>
+
+
+
+
+npx shadcn@latest add https://facadeui.com/r/animated-counter.json
+
+
+
+
+
+
+<h2>
+  
+  
+  Where it belongs on a real estate site
+</h2>
+
+<p>On a listing page, the calculator goes directly under the key facts, before the photo gallery ends and the agent card appears. Buyers scroll to the price, then to the payment, then decide whether to keep reading. On a brokerage home page it earns less, because there is no price to anchor it to. The block order I use for agent sites is on the <a href="https://dev.to/for/real-estate-agent">real estate agent page</a>.</p>
+
+<p>One thing I do not do: pull live rates from an API. Rates change daily, the calculator becomes a compliance question, and buyers understand that 6.5 percent is an example. Set a sensible default, let them change it, and put a one line disclaimer under the donut.</p>
+
+<h2>
+  
+  
+  FAQ
+</h2>
+
+<h3>
+  
+  
+  Does the calculator include PMI?
+</h3>
+
+<p>No. Private mortgage insurance depends on the lender and the loan program, and a wrong PMI number is worse than none. If your market needs it, add it as a fifth monthly line in the onChange consumer or extend the component; the source is yours after installation.</p>
+
+<h3>
+  
+  
+  Can I use it outside the US?
+</h3>
+
+<p>Yes. The formula is universal for fixed rate loans. Pass monthlyHoa={0}, set propertyTaxRate to your local rate or 0, and format currency with your own Intl locale in the consuming component. The labels are props, so "HOA" can become "Service charge" or disappear.</p>
+
+<h3>
+  
+  
+  Why not use a mortgage calculator embed from a lender?
+</h3>
+
+<p>Embeds load a third party script, carry the lender's branding, and often break Core Web Vitals on mobile because they inject an iframe above the fold. A component you own renders as part of the page, inherits your theme tokens and sends leads to you, not to the lender.</p>
+
+
+
+
+<p>Originally published at <a href="https://facadeui.com/blog/react-mortgage-calculator?utm_source=devto&amp;utm_medium=social&amp;utm_campaign=art-react-mortgage-calculator">https://facadeui.com/blog/react-mortgage-calculator?utm_source=devto&amp;utm_medium=social&amp;utm_campaign=art-react-mortgage-calculator</a></p></div>
+</article>
+<article class="article-card" id="artikel-6618">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Big Ten basketball: Penn State&#8217;s Mike Rhoades under scrutiny in his 4th season with massive roster turnover", "image": [], "datePublished": "2026-11-01T13:00:38Z", "dateModified": "2026-11-01T13:00:38Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-6618"}</script>
+    <h2>Big Ten basketball: Penn State&amp;#8217;s Mike Rhoades under scrutiny in his 4th season with massive roster turnover</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Business</strong> &nbsp;|&nbsp;
+        <a href="https://www.chicagotribune.com/2026/11/01/college-basketball-penn-state-outlook/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><p>Penn State coach Mike Rhoades finds himself in a tight spot as he enters his fourth season.</p>
+<p>The Nittany Lions are 40-52 overall since Rhoades replaced Micah Shrewsberry and a woeful 18-42 in Big Ten play. There was a postseason exodus typical in the transfer portal era, with a massive chunk of Penn State&#8217;s scoring moving on. Rhoades leaned heavily into the portal and the international market in search of fresh blood to complement holdovers Josh Reed and Ivan Juric.</p>
+<p><strong>Last season:</strong> 12-20, 3-17 Big Ten</p>
+<h4>Players to watch</h4>
+<p><strong>Josh Reed</strong>, a 6-foot-8 forward, averaged 11.5 points and 4.1 rebounds and is expected to take on a larger role this season. &#8230; <strong>Ivan Juric</strong>, a 7-foot forward, showed flashes as a freshman while averaging 10.5 points and a team-high 5.3 rebounds. &#8230; Guard <strong>Brant Byers</strong>, a transfer from Miami (Ohio), is a career 40% shooter from 3-point range.</p>
+<h4>Departures and arrivals</h4>
+<p>The roster is stacked with seven international players hailing from six different countries: Serbia (Juric and forward Roko Prkacin), Latvia (guard Robert Blums), England (forward Tim Oboh), France (forward Francois Wibaut), Serbia (forward Aleksandar Zecevic) and the Philippines (freshman guard Andy Gemao). Going overseas to find talent is becoming increasingly common in the Power Four conferences, and Rhoades will likely need the group to make a significant impact if he wants to see a fifth season in Happy Valley.</p>
+<h4>Top games</h4>
+<p>The Nittany Lions open the season at home against Canisius on Nov. 2.</p>
+<p>The nonconference schedule is relatively light, save for a meeting with in-state rival Pittsburgh on Nov. 8 in Philadelphia and a trip to the Bahamas for the Battle for Atlantis that includes a matchup with Memphis and then either Wake Forest or Mississippi State.</p>
+<p>Big Ten play begins at preseason <a href="https://www.chicagotribune.com/2026/10/27/illinois-mens-basketball-season-preview/">No. 3 Illinois on Dec. 12</a>. A difficult conference road schedule includes a late-season swing through Los Angeles to take on preseason Top 25 teams USC and UCLA.</p>
+<h4>Facts and figures</h4>
+<p>Blums was impressive in an exhibition win over St. Bonaventure, scoring 17 points while making 4 of 7 3-pointers. &#8230; Thomas Allard, a transfer from Alabama-Huntsville, had 18 points and eight rebounds and his 6-7 frame could be a matchup problem out on the wing for opponents. &#8230; The Nittany Lions have 10 all-time NCAA Tournament appearances, but just three this century. &#8230; The biggest challenge for Penn State will be on the glass. The Nittany Lions were last in the Big Ten in rebounding margin last season (minus 6.6).</p></div>
+</article>
 <article class="article-card" id="artikel-1935">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "My family and I moved back home to Kentucky from Los Angeles. It gave me more time with my dad before his sudden death.", "image": ["https://i.insider.com/6ad77d22adb77227909a73cb?format=jpeg"], "datePublished": "2026-11-01T12:28:01Z", "dateModified": "2026-11-01T12:28:01Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1935"}</script>
     <h2>My family and I moved back home to Kentucky from Los Angeles. It gave me more time with my dad before his sudden death.</h2>
@@ -78,6 +331,19 @@ Read the original article on <a href="https://www.businessinsider.com/moving-hom
 
 <p>Originally published on Pixel2Tech: <a href="https://pixel2tech.com/blog/contact-form-crm-integration-brief">https://pixel2tech.com/blog/contact-form-crm-integration-brief</a></p></div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-1936">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "The 7 best movies coming to Netflix in November", "image": ["https://i.insider.com/6ae6181af3bee449b3d29f0f?format=jpeg"], "datePublished": "2026-11-01T12:12:01Z", "dateModified": "2026-11-01T12:12:01Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1936"}</script>
     <h2>The 7 best movies coming to Netflix in November</h2>
@@ -151,19 +417,6 @@ Read the original article on <a href="https://www.businessinsider.com/best-movie
     <div class="article-body"><img src="https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/d7fff18e-f27b-434c-a197-c247b746c789_602edef0.jpg?itok=0MGLfxRz&amp;v=1793531716" alt="China’s banks, regulators to meet on measures to arrest stock slide" loading="lazy">China’s central bank and securities regulator are expected to meet with financial institutions on Monday to discuss measures to bolster the country’s stock market, following a sell-off in October that heightened concerns over market stability, according to mainland media reports.
 The People’s Bank of China (PBOC) will meet representatives from major banks alongside the National Financial Regulatory Administration and the China Securities Regulatory Commission (CSRC) to discuss measures to...</div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-1952">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Edward Keegan: Planned high-rise apartments show new tendencies in the Chicago tall building", "image": [], "datePublished": "2026-11-01T11:00:47Z", "dateModified": "2026-11-01T11:00:47Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1952"}</script>
     <h2>Edward Keegan: Planned high-rise apartments show new tendencies in the Chicago tall building</h2>
@@ -265,6 +518,19 @@ Knierim is named in a lawsuit against the Education Department regarding stalled
 Student-loan borrowers risk defaulting if they cannot afford payments while their relief is being processed.<p>Vanessa Valadez for BI</p><p>His forbearance request was approved days before he was set to default, and a "reconsideration request" on his PSLF status is in progress.</p><p>The AFT's lawsuit said that Knierim's dilemma is likely "widespread, affecting thousands, if not tens of thousands, of borrowers." One of the plaintiffs in the lawsuit, Elizabeth Schoepflin, had 14 payments toward PSLF rescinded, extending her repayment timeline by nearly a year and a half.</p><p>"Her servicer confirmed that there were no changes to her account that would explain the Department's clawback, and could not tell her why the Department took away the qualifying months," the lawsuit said.</p><p>Knierim said he's been diligent with his payments and that customer service representatives repeatedly assured him he was on track for loan forgiveness. He's hopeful he'll get the relief he's paid years toward and can continue his retirement with his student loans officially behind him.</p><p>"If I have to restore that payment, it's going to put my wife and me in a bad situation," Knierim said. "We're too tight in retirement to be shelling out money for stuff that we can't afford."</p><p><em>Have a story to share about student loans? Contact this reporter at </em><a href="mailto:asheffey@businessinsider.com"><em>asheffey@businessinsider.com</em></a><em>.</em></p>
 Read the original article on <a href="https://www.businessinsider.com/retired-student-loan-borrower-pslf-payments-new-lawsuit-debt-relief-2026-11">Business Insider</a></div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-1942">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "The latest update on the grocery wars is here, with Walmart and Costco gaining ground", "image": ["https://i.insider.com/6ae4fd278bd5d6547af34444?format=jpeg"], "datePublished": "2026-11-01T10:47:02Z", "dateModified": "2026-11-01T10:47:02Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1942"}</script>
     <h2>The latest update on the grocery wars is here, with Walmart and Costco gaining ground</h2>
@@ -296,19 +562,6 @@ Read the original article on <a href="https://www.businessinsider.com/grocery-wa
 Ken Peng, chief investment officer at Raffles Family Office, said there were currently no signs of a large-scale sell-off in the US real estate market, with some local markets in the US even seeing supply shortages.
 “I believe the Federal Reserve’s current rate-hiking cycle...</div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-3403">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Regularly $580, get Microsoft Visio for $50 through midnight tonight", "image": [], "datePublished": "2026-11-01T07:00:00+00:00", "dateModified": "2026-11-01T07:00:00+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-3403"}</script>
     <h2>Regularly $580, get Microsoft Visio for $50 through midnight tonight</h2>
@@ -385,6 +638,19 @@ Ken Peng, chief investment officer at Raffles Family Office, said there were cur
     </div>
     <div class="article-body">Navarrette and Marcello Hernández find all the ways not to market a new Sprite drink</div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-3665">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Forza co-creator Dan Greenawalt is reportedly leaving Microsoft", "image": ["https://cdn.mos.cms.futurecdn.net/xEZVAEzY4NHUyqy7YXb35S-1920-80.png"], "datePublished": "2026-11-01T04:05:48+00:00", "dateModified": "2026-11-01T04:05:48+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-3665"}</script>
     <h2>Forza co-creator Dan Greenawalt is reportedly leaving Microsoft</h2>
@@ -652,19 +918,6 @@ Ken Peng, chief investment officer at Raffles Family Office, said there were cur
 <p></p>
 </div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-2520">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Complete Probably Stolen walkthrough: Week 1", "image": [], "datePublished": "2026-11-01T00:13:10+00:00", "dateModified": "2026-11-01T00:13:10+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-2520"}</script>
     
@@ -692,6 +945,19 @@ Screenshot by Destructoid    <p>On the fifth day, you&#8217;ll get to establish 
     </div>
     <div class="article-body"><img src="https://nypost.com/wp-content%2Fuploads%2Fsites%2F2%2F2026%2F10%2Fwww-linkedin-com-katie-suarez-147132056.jpg?w%3D400" alt="NYC jogger stabbed in neck in random attack remembered as family-oriented woman" loading="lazy">The jogger who was stabbed in the neck on a popular Brooklyn waterfront promenade Friday night was remembered by neighbors as a “family oriented” woman who worked at a local bank.</div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-1802">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Donald Trump Weighs In on Nicki Minaj as Potential White House Press Secretary", "image": [], "datePublished": "2026-10-31T18:51:21+00:00", "dateModified": "2026-10-31T18:51:21+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1802"}</script>
     <h2>Donald Trump Weighs In on Nicki Minaj as Potential White House Press Secretary</h2>
@@ -1032,19 +1298,6 @@ The article notes a 2024 paper from the Nuclear Regulatory Commission citing a 2
     </div>
     <div class="article-body">OpenAI’s latest funding round doesn't seem to be living up to expectations.</div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-2049">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Traders are already placing leveraged bets on Anthropic’s IPO using crypto contracts", "image": ["https://cdn.sanity.io/images/s3y3vcno/production/8fd95443e3e2c921397c19baef34ed692d264598-6000x3375.jpg?fm=jpg&w=800&h=450&crop=focalpoint&fit=clip"], "datePublished": "2026-10-31T16:00:00+00:00", "dateModified": "2026-10-31T16:00:00+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-2049"}</script>
     <h2>Traders are already placing leveraged bets on Anthropic’s IPO using crypto contracts</h2>
@@ -1063,6 +1316,19 @@ The article notes a 2024 paper from the Nuclear Regulatory Commission citing a 2
     </div>
     <div class="article-body"><img src="https://s3-images.ctmedia.io/media/article-covers/2026/10/01M699FRTD1VV81MBCZE1W7405/binance-robot-hands.png" alt="Binance says 90% of stolen assets replenished, targets Sunday withdrawals" loading="lazy"><p><img alt="Binance says 90% of stolen assets replenished, targets Sunday withdrawals" src="https://s3-images.ctmedia.io/media/article-covers/2026/10/01M699FRTD1VV81MBCZE1W7405/binance-robot-hands.png"></p><p>Less-liquid tokens make up the remaining shortfall as Binance continues buying replacement assets through market and over-the-counter trades.</p><p>Binance said Saturday it had replenished 90% of the assets stolen in its $6.3 billion hack, up from 80% a day earlier, and remained on track to resume withdrawals Sunday.</p><p>The exchange is using a combination of its corporate treasury, a partial deployment of its Secure Asset Fund for Users (SAFU) and a portion of its futures insurance fund, a spokesperson told Cointelegraph.</p><p>“Binance will absorb the financial impact of the stolen funds, not users,” the spokesperson said, adding that the insurance fund would remain above required risk management levels.</p><p><a href="https://cointelegraph.com/news/binance-hack-90-percent-replenished">Read more</a></p><p></p></div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-2067">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Binance says 90% of stolen assets replenished, targets Sunday withdrawals", "image": ["https://s3-images.ctmedia.io/media/article-covers/2026/10/01M699FRTD1VV81MBCZE1W7405/binance-robot-hands.png"], "datePublished": "2026-10-31T15:36:01+00:00", "dateModified": "2026-10-31T15:36:01+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-2067"}</script>
     
@@ -1090,19 +1356,6 @@ The article notes a 2024 paper from the Nuclear Regulatory Commission citing a 2
     </div>
     <div class="article-body"><img src="https://s3-images.ctmedia.io/media/article-covers/2026/10/01M6784E305ZRSTBDYV0WKG4RR/hi-true-or-false-91-of-surveys-about-bitcoin-and-crypto-are-totally-wrong.png" alt="Bitcoin held up better than expected after Binance hack, Strive CEO says" loading="lazy"><p><img alt="Bitcoin held up better than expected after Binance hack, Strive CEO says" src="https://s3-images.ctmedia.io/media/article-covers/2026/10/01M6784E305ZRSTBDYV0WKG4RR/hi-true-or-false-91-of-surveys-about-bitcoin-and-crypto-are-totally-wrong.png"></p><p>Strive CEO Matt Cole says the Binance hack has not changed his long-term case for Bitcoin, but cautions it is too early to call a market bottom.</p></div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-130">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Scary deals? What makes Hong Kong shun death-linked homes while France embraces the risk", "image": ["https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/10/27/0d903b93-7bb4-4999-b59f-5f0dfff8f9f1_f75cfb4c.jpg?itok=voSljQo6&v=1793080006"], "datePublished": "2026-10-31T03:00:13+00:00", "dateModified": "2026-10-31T03:00:13+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-130"}</script>
     <h2>Scary deals? What makes Hong Kong shun death-linked homes while France embraces the risk</h2>
@@ -1123,6 +1376,19 @@ The aversion stands in stark contrast to parts of Europe, particularly in France
     </div>
     <div class="article-body">Anime saw growth in both foreign sales and the domestic market, driven in no small part by the huge global success of the latest 'Demon Slayer' movie</div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-3030">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Shaping Saskatchewan: Christie Peters", "image": ["https://globalnews.ca/wp-content/uploads/2026/10/Shaping-Saskatchewan-Christie-Peters-Screen-shot.docx.jpg?quality=65&strip=all"], "datePublished": "2026-10-30T22:53:52+00:00", "dateModified": "2026-10-30T22:53:52+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-3030"}</script>
     <h2>Shaping Saskatchewan: Christie Peters</h2>
@@ -1150,19 +1416,6 @@ The aversion stands in stark contrast to parts of Europe, particularly in France
     </div>
     <div class="article-body"><img src="https://media.wired.com/photos/6ae29474af20331957eab922/master/pass/business-Uncanny-Valley-anthropic-ipo.jpg" alt="How a Contractor’s Claude Agent Got Into the Pentagon" loading="lazy">This week on Uncanny Valley, we also discuss Anthropic’s IPO filing and the volunteers gearing up to counter ICE at the midterms.</div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-1788">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Rick Ross Gets Felony Domestic Violence Charge Dropped, Now Facing Only Misdemeanor", "image": [], "datePublished": "2026-10-30T20:22:27+00:00", "dateModified": "2026-10-30T20:22:27+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1788"}</script>
     <h2>Rick Ross Gets Felony Domestic Violence Charge Dropped, Now Facing Only Misdemeanor</h2>
@@ -1463,6 +1716,19 @@ The aversion stands in stark contrast to parts of Europe, particularly in France
     </div>
     <div class="article-body"><img src="https://cdn.decrypt.co/wp-content/uploads/2026/01/decrypt-style-wall-street-gID_7.png" alt="Worried About Crypto Hacks? Buy Bitcoin Proxies in Stock Market Instead, Say Wall Street Firms" loading="lazy">Analysts at Cantor Fitzgerald, TD Cowen and Compass Point say the record $6.4 billion theft is a Binance security failure, not a crypto-wide threat, pointing clients toward proxies like Coinbase, Robinhood, and Strategy.</div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-3436">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Affording America: For a traveling carnival, rising costs mean a bumpy ride", "image": ["https://prodamdnewsencoding.akamaized.net/NBC_News_Digital/d_ov_feature_affording_carnivals_261030/1/abs/index.m3u8"], "datePublished": "2026-10-30T19:11:41+00:00", "dateModified": "2026-10-30T19:11:41+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-3436"}</script>
     <h2>Affording America: For a traveling carnival, rising costs mean a bumpy ride</h2>
@@ -1490,19 +1756,6 @@ The aversion stands in stark contrast to parts of Europe, particularly in France
     </div>
     <div class="article-body">The long running legal battle centers on allegations that the league and its teams conspired to reach exclusive deals with broadcast partners for the right to air out-of-market games.</div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-1791">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "How Turnstile Pulled Off Its Massive Washington Monument Benefit Show: ‘It Took a Village’", "image": [], "datePublished": "2026-10-30T17:01:29+00:00", "dateModified": "2026-10-30T17:01:29+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1791"}</script>
     <h2>How Turnstile Pulled Off Its Massive Washington Monument Benefit Show: ‘It Took a Village’</h2>
@@ -2124,6 +2377,19 @@ The aversion stands in stark contrast to parts of Europe, particularly in France
     </div>
     <div class="article-body">The investment bank released a new report exploring how media rights and athlete fame will help drive the business higher.</div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-3054">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "CIBC names Bill Morneau as next board chair", "image": ["https://globalnews.ca/wp-content/uploads/2026/10/54702e30a6f5283e63523a8cbfd2f51114839aa2ec4e1201c2d935590984f432.jpg?quality=65&strip=all"], "datePublished": "2026-10-30T12:30:49+00:00", "dateModified": "2026-10-30T12:30:49+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-3054"}</script>
     <h2>CIBC names Bill Morneau as next board chair</h2>
@@ -2455,19 +2721,6 @@ The profile of affluent individuals and families across Asia is also changing, w
 
 </div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-2362">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Fox World Series Hopes Revived By Tampa Rally, But A Wall Street Firm Sees Limited Hit From Shorter Series", "image": ["https://deadline.com/wp-content/uploads/2026/10/World-Series-Game-4.jpg"], "datePublished": "2026-10-28T16:28:03+00:00", "dateModified": "2026-10-28T16:28:03+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-2362"}</script>
     <h2>Fox World Series Hopes Revived By Tampa Rally, But A Wall Street Firm Sees Limited Hit From Shorter Series</h2>
@@ -2880,6 +3133,19 @@ The profile of affluent individuals and families across Asia is also changing, w
 
 </div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-2987">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "A federal IVF program will harmonize ‘patchwork’ approach, experts say", "image": ["https://globalnews.ca/wp-content/uploads/2026/10/ivf-e1792185216100.jpg?quality=65&strip=all"], "datePublished": "2026-10-16T21:37:09+00:00", "dateModified": "2026-10-16T21:37:09+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-2987"}</script>
     <h2>A federal IVF program will harmonize ‘patchwork’ approach, experts say</h2>
@@ -3123,19 +3389,6 @@ Ariana Grande, 2025. CREDIT: Katia Temkin
 <p>She also withdrew from <a href="https://www.nme.com/news/music/sunday-in-the-park-with-george-to-be-revived-with-jonathan-bailey-and-ariana-grande-3923249">the upcoming West End revival of <i>Sunday In The Park With George</i></a>, in which she had been due to appear alongside her <i>Wicked</i><i> </i>co-star Jonathan Bailey. It would have been her West End debut at London’s Barbican Centre, starting next summer.</p>
 <p>The post <a href="https://www.nme.com/news/music/ariana-grande-hits-out-at-team-trump-for-using-we-cant-be-friends-in-tiktok-3963892">Ariana Grande hits out at Team Trump for using ‘We Can’t Be Friends’ in TikTok</a> appeared first on <a href="https://www.nme.com">NME</a>.</p></div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-1913">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Failure is an option in crypto finance", "image": ["https://blockworks-co.imgix.net/wp-content/uploads/2025/12/bw-failure.png"], "datePublished": "2026-01-01T00:18:58+00:00", "dateModified": "2026-01-01T00:18:58+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1913"}</script>
     <h2>Failure is an option in crypto finance</h2>
@@ -3154,6 +3407,19 @@ Ariana Grande, 2025. CREDIT: Katia Temkin
     </div>
     <div class="article-body">The investment signals confidence in Levelpath's fast growth and its potential to disrupt a market dominated by legacy players.</div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-2517">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "EA FC 24 rival UFL sets impressive player numbers in open beta weekend", "image": [], "datePublished": "2024-06-18T09:33:30+00:00", "dateModified": "2024-06-18T09:33:30+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-2517"}</script>
     
@@ -3210,19 +3476,6 @@ Ariana Grande, 2025. CREDIT: Katia Temkin
     </div>
     <div class="article-body"><img src="https://deadline.com/wp-content/uploads/2022/02/892-still-e1658263631720.jpeg" alt="‘Breaking’ Trailer: John Boyega’s Marine Vet Takes Bank Hostage In Bleecker Street Thriller" loading="lazy">Bleecker Street today unveiled the trailer for its John Boyega thriller Breaking—formerly titled 892—which is slated fo release in theaters nationwide on August 26. The film from director Abi Damaris Corbin is based on the true story of Marine Veteran Brian Brown-Easley (Boyega), who finds himself financially desperate and running out of options after being denied [&#8230;]</div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-1411">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Smartphone shipments are down 11% globally while demand still rises for iPhone 13", "image": ["https://9to5mac.com/wp-content/uploads/sites/6/2022/01/The-Rewind-iPhone-13-mini-camera-module.jpg?quality=82&#038;strip=all&#038;w=1600"], "datePublished": "2022-04-19T19:33:25+00:00", "dateModified": "2022-04-19T19:33:25+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1411"}</script>
     <h2>Smartphone shipments are down 11% globally while demand still rises for iPhone 13</h2>
@@ -3245,6 +3498,19 @@ Ariana Grande, 2025. CREDIT: Katia Temkin
     </div>
     <div class="article-body"><img src="https://variety.com/wp-content/uploads/2019/08/facebook.jpg" alt="Facebook Invests Additional $100 Million to Support News Industry During Coronavirus" loading="lazy">Social media giant Facebook is investing $100 million to support local news organizations during the coronavirus pandemic, in addition to its previous commitment to spend $300 million over a three-year period. Around $25 million of the new package will be emergency grant funding for local news via the Facebook Journalism Project. A further $75 million is [&#8230;]</div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-1454">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Scientists invent self-healing smartphone screen material, could come to market in 2020", "image": [], "datePublished": "2017-04-04T15:45:43+00:00", "dateModified": "2017-04-04T15:45:43+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1454"}</script>
     <h2>Scientists invent self-healing smartphone screen material, could come to market in 2020</h2>
@@ -3284,19 +3550,6 @@ Ariana Grande, 2025. CREDIT: Katia Temkin
 <p>Businesses can use the new Appointments app even if they don’t process payments payments with Square.</p>
 <p>Square Appointments is available for free on the <a href="https://itunes.apple.com/app/id1023050786?at=10laZc">App Store</a> and joins Square Register, Cash, and Analytics.</p></div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-1385">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Angela Ahrendts: As back-to-school gift, Apple Watch will let students peek at small screen", "image": ["https://9to5mac.com/wp-content/client-mu-plugins/9to5-core/includes/obfuscate-images/images/9to5mac-default.jpg?quality=82&#038;strip=all&#038;w=1600"], "datePublished": "2015-08-24T21:20:01+00:00", "dateModified": "2015-08-24T21:20:01+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1385"}</script>
     <h2>Angela Ahrendts: As back-to-school gift, Apple Watch will let students peek at small screen</h2>
@@ -3317,6 +3570,19 @@ Ariana Grande, 2025. CREDIT: Katia Temkin
     </div>
     <div class="article-body">Update: Our winner has been announced! Congrats! Congratulations to Jaime Marin—the winner of the Bushel Challenge! Jaime manages Apple devices...</div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-1413">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Opinion: Seven reasons I think Apple may become a bank within the next five years", "image": [], "datePublished": "2015-06-22T14:46:35+00:00", "dateModified": "2015-06-22T14:46:35+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1413"}</script>
     <h2>Opinion: Seven reasons I think Apple may become a bank within the next five years</h2>
@@ -3344,19 +3610,6 @@ Ariana Grande, 2025. CREDIT: Katia Temkin
     </div>
     <div class="article-body">Apple will be joining the Dow Jones Industrial Average taking wireless carrier AT&#38;T&#8217;s spot on the famed stock market index, CNBC...</div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-1417">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Intuit’s Mint app adds new bill reminder features, accessibility improvements, more", "image": [], "datePublished": "2015-03-03T16:45:49+00:00", "dateModified": "2015-03-03T16:45:49+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1417"}</script>
     <h2>Intuit’s Mint app adds new bill reminder features, accessibility improvements, more</h2>
@@ -3375,6 +3628,19 @@ Ariana Grande, 2025. CREDIT: Katia Temkin
     </div>
     <div class="article-body">Apple is looking to hire individuals across the US for a team of IBM Business Development Executives that “will be...</div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-1392">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Intuit’s Mint iPhone app updated with faster personal finance tracking including fees, alerts, more", "image": [], "datePublished": "2014-11-20T16:18:44+00:00", "dateModified": "2014-11-20T16:18:44+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1392"}</script>
     <h2>Intuit’s Mint iPhone app updated with faster personal finance tracking including fees, alerts, more</h2>
@@ -3404,19 +3670,6 @@ Ariana Grande, 2025. CREDIT: Katia Temkin
     </div>
     <div class="article-body">Intuit is out today with a new version of its personal finance app with the release of Quicken 2015 for...</div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-1466">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "The 12 reasons Apple employees love working for the company", "image": [], "datePublished": "2014-08-01T12:31:15+00:00", "dateModified": "2014-08-01T12:31:15+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1466"}</script>
     <h2>The 12 reasons Apple employees love working for the company</h2>
@@ -3435,6 +3688,19 @@ Ariana Grande, 2025. CREDIT: Katia Temkin
     </div>
     <div class="article-body">Yahoo has released a new version of its Finance app for iPhone and iPad featuring the addition of a new...</div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-1430">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Apple finds new Washington, D.C. lobbyist in former Senate Finance Committee staffer Amber Cottle", "image": [], "datePublished": "2014-03-25T01:09:15+00:00", "dateModified": "2014-03-25T01:09:15+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1430"}</script>
     <h2>Apple finds new Washington, D.C. lobbyist in former Senate Finance Committee staffer Amber Cottle</h2>
@@ -3465,19 +3731,6 @@ Ariana Grande, 2025. CREDIT: Katia Temkin
 <p>Surprisingly, some of their gains come at the expense of two other big names: HTC and Motorola. Motorola slipped only a bit, from 5.4 million handsets in Q4 2011 to 5.1 million in Q1 2012. Michael Morgan, ABI's senior analyst for mobile devices, told Ars that the drop was "likely due to seasonality." Motorola had a handful of handset launches spanning last fall, including the <a href="http://arstechnica.com/gadgets/2011/11/hands-on-with-the-motorola-droid-razr-great-performance-in-an-odd-package/">Droid Razr</a> (which was launched globally as the Motorola Razr), <a href="http://arstechnica.com/gadgets/2011/08/an-eccentric-phone-on-top-for-a-fleeting-moment-motorola-photon-4g-review/">Photon 4G</a>, and the <a href="http://arstechnica.com/gadgets/2011/09/the-led-at-the-end-of-the-tunnel-hands-on-with-the-motorola-droid-bionic/">Droid Bionic</a>.</p><p><a href="https://arstechnica.com/gadgets/2012/06/samsung-ships-43-million-smartphones-in-q1-dwarfs-htc-and-motorola/">Read full article</a></p>
 <p><a href="https://arstechnica.com/gadgets/2012/06/samsung-ships-43-million-smartphones-in-q1-dwarfs-htc-and-motorola/#comments">Comments</a></p></div>
 </article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
 <article class="article-card" id="artikel-1531">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Apple to take global “portable computers” share for the remainder of 2011", "image": [], "datePublished": "2011-08-08T13:28:30+00:00", "dateModified": "2011-08-08T13:28:30+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/business.html#artikel-1531"}</script>
     <h2>Apple to take global “portable computers” share for the remainder of 2011</h2>
@@ -3495,5 +3748,18 @@ Ariana Grande, 2025. CREDIT: Katia Temkin
         <a href="https://techcrunch.com/2007/02/14/hummer-launching-mobile-brand/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
     </div>
     <div class="article-body">Nothing gets more American than driving a Hummer with some McDonalds in your lap and some Steve Miller Band on the stereo. And since we Americans love our cellphones, it makes total sense that Hummer is starting a mobile brand with Modelabs Group. The two companies are partnering to design, produce, and market a line [&#8230;]</div>
-</article><footer>&copy; 2026 News Portal Indonesia. All rights reserved.</footer>
+</article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+<footer>&copy; 2026 News Portal Indonesia. All rights reserved.</footer>
 </div></body></html>

